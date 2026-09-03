@@ -1,7 +1,7 @@
 {
-  "name": "TODO: Fulfill here ❌️",
+  "name": "expense-note-backend",
   "version": "0.0.0",
-  "description": "TODO: Fulfill here",
+  "description": "The expense note API — one GraphQL server for the screens a member of staff uses",
   "main": "index.js",
   "type": "module",
   "scripts": {
