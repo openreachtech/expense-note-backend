@@ -12,6 +12,13 @@
 #
 # Every port is published on 127.0.0.1. Binding every interface would put a database whose
 # password is `password` on whatever network this machine is attached to.
+#
+# WHY THIS CONTAINER EXISTS AT ALL, given that nothing in day-to-day development connects to
+# it: sequelize/config.cjs runs `development` on SQLite, so the column types section 9 of the
+# spec declares are never actually exercised by a development run or by the test suites.
+# SQLite reads a `bigint` primary key back as `INTEGER` and every `datetime(3)` as a bare
+# `DATETIME`, and it is lax about `varchar(191)`. A migration can therefore pass every local
+# check and still be wrong. Run the migrations against this container before believing them.
 
 services:
   mariadb:
@@ -21,10 +28,20 @@ services:
     environment:
       MYSQL_USER: user
       MYSQL_PASSWORD: password
-      MYSQL_DATABASE: development   # matches .env.development and NODE_ENV
+      # `live` is the database name, not a typo for the file name. sequelize/config.cjs has
+      # exactly one MariaDB block, `live`, and it connects to a database called `live` as
+      # root. .github/workflows/test-with-mariadb.yml creates the same name with NODE_ENV
+      # set to live, so CI is what this has to agree with — a local container creating
+      # `development` would have nothing for those migrations to run against.
+      MYSQL_DATABASE: live
       MYSQL_ROOT_PASSWORD: password
     healthcheck:
-      test: ['CMD', 'healthcheck.sh', '--connect', '--innodb_initialized']
+      # `healthcheck.sh` is NOT in mariadb:10.5.12 -- the image gained it in a later
+      # release. With it the container stays `unhealthy` forever and `./docker.sh start`,
+      # which waits on health, fails every time even though the database is up and
+      # serving. `mysqladmin ping` ships in 10.5.12 and answers `mysqld is alive`, so
+      # health tracks the pinned image rather than a later one.
+      test: ['CMD', 'mysqladmin', 'ping', '-h', '127.0.0.1', '-uroot', '-ppassword']
       interval: 5s
       timeout: 5s
       retries: 20
