@@ -109,9 +109,17 @@ export default class Expense extends BaseAppRenchanModel {
    * Setup model hooks.
    *
    * Refuses a row whose owner or category does not exist. There is no database foreign-key
-   * constraint in this project, so the reference is verified here, on the one write path every
-   * create and every correction passes through. Each existence read joins the caller's
-   * transaction, so a row written and referenced inside one transaction is seen.
+   * constraint in this project, so the reference is verified here — on the three write paths
+   * this model supports, not just the per-row one. `bulkCreate()` and the static `update()` both run with
+   * `individualHooks: false`, so neither of them reaches `beforeSave`; a hook on that path alone
+   * would let a bulk write name a member of staff or a category that does not exist. Each
+   * existence read joins the caller's transaction, so a row written and referenced inside one
+   * transaction is seen.
+   *
+   * **`upsert()` is not covered and is not supported here.** It runs `beforeUpsert` alone —
+   * neither `beforeSave` nor either bulk hook — so a row written that way would bypass this
+   * check entirely. Nothing calls it, and no operation exists to; adding a caller means adding
+   * the hook first.
    *
    * @returns {void}
    */
@@ -119,21 +127,111 @@ export default class Expense extends BaseAppRenchanModel {
     super.setupHooks?.()
 
     this.beforeSave(async (expense, options) => {
-      const staffMember = await this._.StaffMember.findByPk(expense.StaffMemberId, {
+      await this.verifyStaffMember({
+        staffMemberId: expense.StaffMemberId,
         transaction: options.transaction,
       })
 
-      if (staffMember === null) {
-        throw new Error(`Expense names a StaffMember that does not exist: ${expense.StaffMemberId}`)
-      }
-
-      const expenseCategory = await this._.ExpenseCategory.findByPk(expense.ExpenseCategoryId, {
+      await this.verifyExpenseCategory({
+        expenseCategoryId: expense.ExpenseCategoryId,
         transaction: options.transaction,
       })
-
-      if (expenseCategory === null) {
-        throw new Error(`Expense names an ExpenseCategory that does not exist: ${expense.ExpenseCategoryId}`)
-      }
     })
+
+    this.beforeBulkCreate(async (expenses, options) => {
+      await Promise.all(
+        expenses.map(async expense => {
+          await this.verifyStaffMember({
+            staffMemberId: expense.StaffMemberId,
+            transaction: options.transaction,
+          })
+
+          await this.verifyExpenseCategory({
+            expenseCategoryId: expense.ExpenseCategoryId,
+            transaction: options.transaction,
+          })
+        })
+      )
+    })
+
+    this.beforeBulkUpdate(async options => {
+      // A bulk update names only the fields it rewrites, so only a reference it actually
+      // rewrites is verified. One it leaves alone was verified when the row was written.
+      const attributes = options.attributes
+        ?? {}
+      const staffMemberId = attributes.StaffMemberId
+        ?? null
+      const expenseCategoryId = attributes.ExpenseCategoryId
+        ?? null
+
+      await this.verifyStaffMember({
+        staffMemberId,
+        transaction: options.transaction,
+      })
+
+      await this.verifyExpenseCategory({
+        expenseCategoryId,
+        transaction: options.transaction,
+      })
+    })
+  }
+
+  /**
+   * Verify that the member of staff an expense names exists.
+   *
+   * The read joins the caller's transaction: a check reading outside it can refuse a row whose
+   * owner does exist, having been written in the same transaction and not yet committed.
+   *
+   * @param {{
+   *   staffMemberId: number
+   *   transaction: import('sequelize').Transaction | null
+   * }} params - Parameters.
+   * @returns {Promise<void>}
+   * @throws {Error} The named member of staff does not exist.
+   */
+  static async verifyStaffMember ({
+    staffMemberId,
+    transaction,
+  }) {
+    if (staffMemberId === null) {
+      return
+    }
+
+    const staffMember = await this._.StaffMember.findByPk(staffMemberId, {
+      transaction,
+    })
+
+    if (staffMember === null) {
+      throw new Error(`Expense names a StaffMember that does not exist: ${staffMemberId}`)
+    }
+  }
+
+  /**
+   * Verify that the category an expense names exists.
+   *
+   * The read joins the caller's transaction, for the same reason the owner's does.
+   *
+   * @param {{
+   *   expenseCategoryId: number
+   *   transaction: import('sequelize').Transaction | null
+   * }} params - Parameters.
+   * @returns {Promise<void>}
+   * @throws {Error} The named category does not exist.
+   */
+  static async verifyExpenseCategory ({
+    expenseCategoryId,
+    transaction,
+  }) {
+    if (expenseCategoryId === null) {
+      return
+    }
+
+    const expenseCategory = await this._.ExpenseCategory.findByPk(expenseCategoryId, {
+      transaction,
+    })
+
+    if (expenseCategory === null) {
+      throw new Error(`Expense names an ExpenseCategory that does not exist: ${expenseCategoryId}`)
+    }
   }
 }

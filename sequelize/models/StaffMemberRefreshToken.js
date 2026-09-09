@@ -12,6 +12,8 @@ import SessionCredentialGenerator from '../../app/session/SessionCredentialGener
 
 const DEFAULT_REFRESH_TOKEN_LIFETIME_DAYS = 14
 const MILLISECONDS_PER_DAY = 86400000
+const HEX_CHARACTERS_PER_BYTE = 2
+const LOWER_CASE_HEX_PATTERN = /^[0-9a-f]+$/u
 
 /**
  * StaffMemberRefreshToken model.
@@ -151,6 +153,7 @@ export default class StaffMemberRefreshToken extends BaseAppRenchanModel {
    *
    * @param {StaffMemberRefreshTokenGeneratedAttributesParams} params - Parameters.
    * @returns {StaffMemberRefreshToken} Unsaved refresh token row.
+   * @throws {Error} The token handed in is not one this project mints.
    * @public
    */
   static buildWithGeneratedAttributes ({
@@ -162,6 +165,18 @@ export default class StaffMemberRefreshToken extends BaseAppRenchanModel {
       generatedAt,
     }),
   }) {
+    // A token is digested only once it is the shape the generator produces. An empty string is
+    // a token as far as a digest is concerned: it hashes to the well-known SHA-256 of the empty
+    // string, and the row that lands is then matched by presenting an empty token - which is a
+    // stored form that can be presented, the one thing this table promises never to hold.
+    if (
+      !this.isGeneratedToken({
+        token: refreshToken,
+      })
+    ) {
+      throw new Error('StaffMemberRefreshToken was handed a refreshToken that SessionCredentialGenerator did not mint')
+    }
+
     const tokenHash = this.hashToken({
       token: refreshToken,
     })
@@ -178,6 +193,33 @@ export default class StaffMemberRefreshToken extends BaseAppRenchanModel {
         expiredAt,
       })
     )
+  }
+
+  /**
+   * Whether a token is one SessionCredentialGenerator produces.
+   *
+   * The shape is the generator's own: lower case hex, as many characters as two per token byte.
+   * The length is read off the generator rather than written here, so a deployment that mints
+   * longer tokens does not leave this check behind. Nothing about a presented token is judged
+   * here - a lookup hashes whatever arrives and simply fails to match.
+   *
+   * @param {{
+   *   token: string
+   * }} params - Parameters.
+   * @returns {boolean} true: the token is the shape the generator mints.
+   */
+  static isGeneratedToken ({
+    token,
+  }) {
+    if (typeof token !== 'string') {
+      return false
+    }
+
+    const credentialGenerator = this.createCredentialGenerator()
+    const expectedLength = credentialGenerator.tokenByteSize * HEX_CHARACTERS_PER_BYTE
+
+    return token.length === expectedLength
+      && LOWER_CASE_HEX_PATTERN.test(token)
   }
 
   /**
