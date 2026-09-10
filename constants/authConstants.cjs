@@ -3,8 +3,8 @@
 /*
  * Cookie that carries the refresh token.
  *
- * The two audiences hold separate refresh tokens under separate names, so a viewer's cookie is
- * never even sent to the admin endpoint. The cookie is scoped to each endpoint's path, which the
+ * Each audience holds its own refresh token under its own name, so a viewer's cookie is never
+ * even sent to another endpoint. The cookie is scoped to each endpoint's path, which the
  * engine already declares as `graphqlEndpoint` — so only the name lives here.
  *
  * `DOMAIN` is deliberately absent: naming a domain widens the cookie to every subdomain, and one
@@ -17,6 +17,9 @@ module.exports = {
     },
     ADMIN: {
       NAME: 'admin_refresh_token',
+    },
+    STAFF: {
+      NAME: 'staff_refresh_token',
     },
   },
 }
