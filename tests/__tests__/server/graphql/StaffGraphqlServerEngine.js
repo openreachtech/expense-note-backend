@@ -1,3 +1,5 @@
+import express from 'express'
+
 import {
   DateTimeScalar,
 } from '@openreachtech/renchan'
@@ -147,8 +149,31 @@ describe('StaffGraphqlServerEngine', () => {
 describe('StaffGraphqlServerEngine', () => {
   describe('#generateFilterHandler()', () => {
     describe('to be instance of Function', () => {
-      test('with no parameter', async () => {
-        const engine = await StaffGraphqlServerEngine.createAsync()
+      const cases = [
+        {
+          factoryParams: {
+            config: /** @type {*} */ ({
+              graphqlEndpoint: '/graphql-staff',
+            }),
+            share: /** @type {*} */ ({}),
+            errorHash: {},
+          },
+        },
+        {
+          factoryParams: {
+            config: /** @type {*} */ ({
+              graphqlEndpoint: '/graphql-staff-second-stand-in',
+            }),
+            share: /** @type {*} */ ({}),
+            errorHash: {},
+          },
+        },
+      ]
+
+      test.each(cases)('config.graphqlEndpoint: $factoryParams.config.graphqlEndpoint', ({
+        factoryParams,
+      }) => {
+        const engine = new StaffGraphqlServerEngine(factoryParams)
 
         const actual = engine.generateFilterHandler()
 
@@ -156,189 +181,353 @@ describe('StaffGraphqlServerEngine', () => {
           .toBeInstanceOf(Function)
       })
     })
+  })
+})
 
-    describe('to call members of context via generated function', () => {
-      const expressRequestMock = /** @type {*} */ ({})
-      const requestParamsMock = /** @type {*} */ ({})
-      const engineMock = /** @type {*} */ ({})
-      const visaMock = /** @type {*} */ ({})
-
+describe('StaffGraphqlServerEngine', () => {
+  describe('#generateFilterHandler()', () => {
+    describe('to resolve with no further check when context.canResolve() returns true', () => {
       const cases = [
         {
           params: {
-            context: StaffGraphqlContext.create({
-              expressRequest: expressRequestMock,
-              requestParams: requestParamsMock,
-              engine: engineMock,
-              userEntity: {
+            contextParams: {
+              expressRequest: /** @type {*} */ ({}),
+              requestParams: /** @type {*} */ ({}),
+              engine: /** @type {*} */ ({}),
+              userEntity: /** @type {*} */ ({
                 id: 10100011,
-              },
-              visa: visaMock,
-            }),
+              }),
+              visa: /** @type {*} */ ({}),
+            },
             information: {
               fieldName: 'signedInStaffMember',
             },
           },
           expected: {
-            schema: 'signedInStaffMember',
+            canResolveArguments: {
+              schema: 'signedInStaffMember',
+            },
           },
         },
         {
           params: {
-            context: StaffGraphqlContext.create({
-              expressRequest: expressRequestMock,
-              requestParams: requestParamsMock,
-              engine: engineMock,
-              userEntity: {
+            contextParams: {
+              expressRequest: /** @type {*} */ ({}),
+              requestParams: /** @type {*} */ ({}),
+              engine: /** @type {*} */ ({}),
+              userEntity: /** @type {*} */ ({
                 id: 10100012,
-              },
-              visa: visaMock,
-            }),
+              }),
+              visa: /** @type {*} */ ({}),
+            },
             information: {
               fieldName: 'expenses',
             },
           },
           expected: {
-            schema: 'expenses',
+            canResolveArguments: {
+              schema: 'expenses',
+            },
           },
         },
       ]
 
-      describe('context.canResolve() returns true', () => {
-        test.each(cases)('fieldName: $params.information.fieldName', async ({ params, expected }) => {
-          const engine = await StaffGraphqlServerEngine.createAsync()
+      test.each(cases)('information.fieldName: $params.information.fieldName', async ({
+        params,
+        expected,
+      }) => {
+        const engine = await StaffGraphqlServerEngine.createAsync()
+        const context = StaffGraphqlContext.create(params.contextParams)
+        const canResolveSpy = jest.spyOn(context, 'canResolve')
+          .mockReturnValue(true)
+        const hasAuthenticatedSpy = jest.spyOn(context, 'hasAuthenticated')
+        const handler = engine.generateFilterHandler()
+        const args = {
+          variables: {},
+          context,
+          information: params.information,
+          parent: {},
+        }
 
-          const canResolveSpy = jest.spyOn(params.context, 'canResolve')
-            .mockReturnValueOnce(true)
-          const hasAuthenticatedSpy = jest.spyOn(params.context, 'hasAuthenticated')
+        await handler(args)
 
-          const handler = engine.generateFilterHandler()
-
-          const args = {
-            variables: {},
-            context: params.context,
-            information: params.information,
-            parent: {},
-          }
-
-          await handler(args)
-
-          expect(canResolveSpy)
-            .toHaveBeenCalledWith(expected)
-          expect(hasAuthenticatedSpy)
-            .not
-            .toHaveBeenCalled()
-        })
+        expect(canResolveSpy)
+          .toHaveBeenCalledWith(expected.canResolveArguments)
+        expect(hasAuthenticatedSpy)
+          .not
+          .toHaveBeenCalled()
       })
+    })
+  })
+})
 
-      describe('context.hasAuthenticated() returns false', () => {
-        test.each(cases)('fieldName: $params.information.fieldName', async ({ params, expected }) => {
-          const engine = await StaffGraphqlServerEngine.createAsync()
+describe('StaffGraphqlServerEngine', () => {
+  describe('#generateFilterHandler()', () => {
+    describe('to refuse the call when context.hasAuthenticated() returns false', () => {
+      const cases = [
+        {
+          params: {
+            contextParams: {
+              expressRequest: /** @type {*} */ ({}),
+              requestParams: /** @type {*} */ ({}),
+              engine: /** @type {*} */ ({}),
+              userEntity: /** @type {*} */ ({
+                id: 10100013,
+              }),
+              visa: /** @type {*} */ ({}),
+            },
+            information: {
+              fieldName: 'signedInStaffMember',
+            },
+          },
+          expected: {
+            canResolveArguments: {
+              schema: 'signedInStaffMember',
+            },
+            error: '102.X000.001',
+          },
+        },
+        {
+          params: {
+            contextParams: {
+              expressRequest: /** @type {*} */ ({}),
+              requestParams: /** @type {*} */ ({}),
+              engine: /** @type {*} */ ({}),
+              userEntity: /** @type {*} */ ({
+                id: 10100014,
+              }),
+              visa: /** @type {*} */ ({}),
+            },
+            information: {
+              fieldName: 'expenses',
+            },
+          },
+          expected: {
+            canResolveArguments: {
+              schema: 'expenses',
+            },
+            error: '102.X000.001',
+          },
+        },
+      ]
 
-          const canResolveSpy = jest.spyOn(params.context, 'canResolve')
-            .mockReturnValueOnce(false)
-          const hasAuthenticatedSpy = jest.spyOn(params.context, 'hasAuthenticated')
-            .mockReturnValueOnce(false)
-          const hasAuthorizedSpy = jest.spyOn(params.context, 'hasAuthorized')
+      test.each(cases)('information.fieldName: $params.information.fieldName', async ({
+        params,
+        expected,
+      }) => {
+        const engine = await StaffGraphqlServerEngine.createAsync()
+        const context = StaffGraphqlContext.create(params.contextParams)
+        const canResolveSpy = jest.spyOn(context, 'canResolve')
+          .mockReturnValue(false)
+        const hasAuthenticatedSpy = jest.spyOn(context, 'hasAuthenticated')
+          .mockReturnValue(false)
+        const hasAuthorizedSpy = jest.spyOn(context, 'hasAuthorized')
+        const handler = engine.generateFilterHandler()
+        const args = {
+          variables: {},
+          context,
+          information: params.information,
+          parent: {},
+        }
 
-          const handler = engine.generateFilterHandler()
+        const actual = () => handler(args)
 
-          const args = {
-            variables: {},
-            context: params.context,
-            information: params.information,
-            parent: {},
-          }
-
-          await expect(handler(args))
-            .rejects
-            .toThrow('102.X000.001')
-
-          expect(canResolveSpy)
-            .toHaveBeenCalledWith(expected)
-          expect(hasAuthenticatedSpy)
-            .toHaveBeenCalledWith()
-          expect(hasAuthorizedSpy)
-            .not
-            .toHaveBeenCalled()
-        })
+        await expect(actual)
+          .rejects
+          .toThrow(expected.error)
+        expect(canResolveSpy)
+          .toHaveBeenCalledWith(expected.canResolveArguments)
+        expect(hasAuthenticatedSpy)
+          .toHaveBeenCalledWith()
+        expect(hasAuthorizedSpy)
+          .not
+          .toHaveBeenCalled()
       })
+    })
+  })
+})
 
-      describe('context.hasAuthorized() returns false', () => {
-        test.each(cases)('fieldName: $params.information.fieldName', async ({ params, expected }) => {
-          const engine = await StaffGraphqlServerEngine.createAsync()
+describe('StaffGraphqlServerEngine', () => {
+  describe('#generateFilterHandler()', () => {
+    describe('to refuse the call when context.hasAuthorized() returns false', () => {
+      const cases = [
+        {
+          params: {
+            contextParams: {
+              expressRequest: /** @type {*} */ ({}),
+              requestParams: /** @type {*} */ ({}),
+              engine: /** @type {*} */ ({}),
+              userEntity: /** @type {*} */ ({
+                id: 10100015,
+              }),
+              visa: /** @type {*} */ ({}),
+            },
+            information: {
+              fieldName: 'signedInStaffMember',
+            },
+          },
+          expected: {
+            canResolveArguments: {
+              schema: 'signedInStaffMember',
+            },
+            error: '102.X000.002',
+          },
+        },
+        {
+          params: {
+            contextParams: {
+              expressRequest: /** @type {*} */ ({}),
+              requestParams: /** @type {*} */ ({}),
+              engine: /** @type {*} */ ({}),
+              userEntity: /** @type {*} */ ({
+                id: 10100016,
+              }),
+              visa: /** @type {*} */ ({}),
+            },
+            information: {
+              fieldName: 'expenses',
+            },
+          },
+          expected: {
+            canResolveArguments: {
+              schema: 'expenses',
+            },
+            error: '102.X000.002',
+          },
+        },
+      ]
 
-          const canResolveSpy = jest.spyOn(params.context, 'canResolve')
-            .mockReturnValueOnce(false)
-          const hasAuthenticatedSpy = jest.spyOn(params.context, 'hasAuthenticated')
-            .mockReturnValueOnce(true)
-          const hasAuthorizedSpy = jest.spyOn(params.context, 'hasAuthorized')
-            .mockReturnValueOnce(false)
-          const hasSchemaPermissionSpy = jest.spyOn(params.context, 'hasSchemaPermission')
+      test.each(cases)('information.fieldName: $params.information.fieldName', async ({
+        params,
+        expected,
+      }) => {
+        const engine = await StaffGraphqlServerEngine.createAsync()
+        const context = StaffGraphqlContext.create(params.contextParams)
+        const canResolveSpy = jest.spyOn(context, 'canResolve')
+          .mockReturnValue(false)
+        const hasAuthenticatedSpy = jest.spyOn(context, 'hasAuthenticated')
+          .mockReturnValue(true)
+        const hasAuthorizedSpy = jest.spyOn(context, 'hasAuthorized')
+          .mockReturnValue(false)
+        const hasSchemaPermissionSpy = jest.spyOn(context, 'hasSchemaPermission')
+        const handler = engine.generateFilterHandler()
+        const args = {
+          variables: {},
+          context,
+          information: params.information,
+          parent: {},
+        }
 
-          const handler = engine.generateFilterHandler()
+        const actual = () => handler(args)
 
-          const args = {
-            variables: {},
-            context: params.context,
-            information: params.information,
-            parent: {},
-          }
-
-          await expect(handler(args))
-            .rejects
-            .toThrow('102.X000.002')
-
-          expect(canResolveSpy)
-            .toHaveBeenCalledWith(expected)
-          expect(hasAuthenticatedSpy)
-            .toHaveBeenCalledWith()
-          expect(hasAuthorizedSpy)
-            .toHaveBeenCalledWith()
-          expect(hasSchemaPermissionSpy)
-            .not
-            .toHaveBeenCalled()
-        })
+        await expect(actual)
+          .rejects
+          .toThrow(expected.error)
+        expect(canResolveSpy)
+          .toHaveBeenCalledWith(expected.canResolveArguments)
+        expect(hasAuthenticatedSpy)
+          .toHaveBeenCalledWith()
+        expect(hasAuthorizedSpy)
+          .toHaveBeenCalledWith()
+        expect(hasSchemaPermissionSpy)
+          .not
+          .toHaveBeenCalled()
       })
+    })
+  })
+})
 
-      describe('context.hasSchemaPermission() returns false', () => {
-        test.each(cases)('fieldName: $params.information.fieldName', async ({ params, expected }) => {
-          const engine = await StaffGraphqlServerEngine.createAsync()
+describe('StaffGraphqlServerEngine', () => {
+  describe('#generateFilterHandler()', () => {
+    describe('to refuse the call when context.hasSchemaPermission() returns false', () => {
+      const cases = [
+        {
+          params: {
+            contextParams: {
+              expressRequest: /** @type {*} */ ({}),
+              requestParams: /** @type {*} */ ({}),
+              engine: /** @type {*} */ ({}),
+              userEntity: /** @type {*} */ ({
+                id: 10100017,
+              }),
+              visa: /** @type {*} */ ({}),
+            },
+            information: {
+              fieldName: 'signedInStaffMember',
+            },
+          },
+          expected: {
+            canResolveArguments: {
+              schema: 'signedInStaffMember',
+            },
+            hasSchemaPermissionArguments: {
+              schema: 'signedInStaffMember',
+            },
+            error: '102.X000.003 {"schema":"signedInStaffMember"}',
+          },
+        },
+        {
+          params: {
+            contextParams: {
+              expressRequest: /** @type {*} */ ({}),
+              requestParams: /** @type {*} */ ({}),
+              engine: /** @type {*} */ ({}),
+              userEntity: /** @type {*} */ ({
+                id: 10100018,
+              }),
+              visa: /** @type {*} */ ({}),
+            },
+            information: {
+              fieldName: 'expenses',
+            },
+          },
+          expected: {
+            canResolveArguments: {
+              schema: 'expenses',
+            },
+            hasSchemaPermissionArguments: {
+              schema: 'expenses',
+            },
+            error: '102.X000.003 {"schema":"expenses"}',
+          },
+        },
+      ]
 
-          const canResolveSpy = jest.spyOn(params.context, 'canResolve')
-            .mockReturnValueOnce(false)
-          const hasAuthenticatedSpy = jest.spyOn(params.context, 'hasAuthenticated')
-            .mockReturnValueOnce(true)
-          const hasAuthorizedSpy = jest.spyOn(params.context, 'hasAuthorized')
-            .mockReturnValueOnce(true)
-          const hasSchemaPermissionSpy = jest.spyOn(params.context, 'hasSchemaPermission')
-            .mockReturnValueOnce(false)
+      test.each(cases)('information.fieldName: $params.information.fieldName', async ({
+        params,
+        expected,
+      }) => {
+        const engine = await StaffGraphqlServerEngine.createAsync()
+        const context = StaffGraphqlContext.create(params.contextParams)
+        const canResolveSpy = jest.spyOn(context, 'canResolve')
+          .mockReturnValue(false)
+        const hasAuthenticatedSpy = jest.spyOn(context, 'hasAuthenticated')
+          .mockReturnValue(true)
+        const hasAuthorizedSpy = jest.spyOn(context, 'hasAuthorized')
+          .mockReturnValue(true)
+        const hasSchemaPermissionSpy = jest.spyOn(context, 'hasSchemaPermission')
+          .mockReturnValue(false)
+        const handler = engine.generateFilterHandler()
+        const args = {
+          variables: {},
+          context,
+          information: params.information,
+          parent: {},
+        }
 
-          const handler = engine.generateFilterHandler()
+        const actual = () => handler(args)
 
-          const args = {
-            variables: {},
-            context: params.context,
-            information: params.information,
-            parent: {},
-          }
-          const hasSchemaPermissionArgsExpected = {
-            schema: expected.schema,
-          }
-
-          await expect(handler(args))
-            .rejects
-            .toThrow(/^102.X000.003 \{"schema":".+"\}/u)
-
-          expect(canResolveSpy)
-            .toHaveBeenCalledWith(expected)
-          expect(hasAuthenticatedSpy)
-            .toHaveBeenCalledWith()
-          expect(hasAuthorizedSpy)
-            .toHaveBeenCalledWith()
-          expect(hasSchemaPermissionSpy)
-            .toHaveBeenCalledWith(hasSchemaPermissionArgsExpected)
-        })
+        await expect(actual)
+          .rejects
+          .toThrow(expected.error)
+        expect(canResolveSpy)
+          .toHaveBeenCalledWith(expected.canResolveArguments)
+        expect(hasAuthenticatedSpy)
+          .toHaveBeenCalledWith()
+        expect(hasAuthorizedSpy)
+          .toHaveBeenCalledWith()
+        expect(hasSchemaPermissionSpy)
+          .toHaveBeenCalledWith(expected.hasSchemaPermissionArguments)
       })
     })
   })
@@ -506,27 +695,240 @@ describe('StaffGraphqlServerEngine', () => {
 
 describe('StaffGraphqlServerEngine', () => {
   describe('#collectMiddleware()', () => {
-    test('to be fixed value', () => {
-      const engine = new StaffGraphqlServerEngine({
-        config: /** @type {*} */ ({
-          staticPath: rootPath.to('public/'),
-        }),
-        share: /** @type {*} */ ({}),
-        errorHash: {},
-      })
-
-      const expected = [
-        expect.any(Function),
-        expect.any(Function),
-        expect.any(Function),
-        expect.any(Function),
-        expect.any(Function),
+    /*
+     * Asserted position by position, by the name of the function each middleware factory hands
+     * back, because `expect.objectContaining()` refuses a function outright (`typeof other !==
+     * 'object'`) and `expect.any(Function)` would pass for any five of them in any order.
+     */
+    describe('to be the five middleware, in the order a request passes through them', () => {
+      const cases = [
+        {
+          factoryParams: {
+            config: /** @type {*} */ ({
+              staticPath: rootPath.to('public/'),
+            }),
+            share: /** @type {*} */ ({}),
+            errorHash: {},
+          },
+          params: {
+            middlewareNamePath: '0.name',
+          },
+          expected: 'corsMiddleware',
+        },
+        {
+          factoryParams: {
+            config: /** @type {*} */ ({
+              staticPath: rootPath.to('public/'),
+            }),
+            share: /** @type {*} */ ({}),
+            errorHash: {},
+          },
+          params: {
+            middlewareNamePath: '1.name',
+          },
+          expected: 'jsonParser',
+        },
+        {
+          factoryParams: {
+            config: /** @type {*} */ ({
+              staticPath: rootPath.to('public/'),
+            }),
+            share: /** @type {*} */ ({}),
+            errorHash: {},
+          },
+          params: {
+            middlewareNamePath: '2.name',
+          },
+          expected: 'serveStatic',
+        },
+        {
+          factoryParams: {
+            config: /** @type {*} */ ({
+              staticPath: rootPath.to('public/'),
+            }),
+            share: /** @type {*} */ ({}),
+            errorHash: {},
+          },
+          params: {
+            middlewareNamePath: '3.name',
+          },
+          // The upload middleware hands back its handler as an unnamed arrow function.
+          expected: '',
+        },
+        {
+          factoryParams: {
+            config: /** @type {*} */ ({
+              staticPath: rootPath.to('public/'),
+            }),
+            share: /** @type {*} */ ({}),
+            errorHash: {},
+          },
+          params: {
+            middlewareNamePath: '4.name',
+          },
+          expected: 'urlencodedParser',
+        },
       ]
 
-      const actual = engine.collectMiddleware()
+      test.each(cases)('middlewareNamePath: $params.middlewareNamePath', ({
+        factoryParams,
+        params,
+        expected,
+      }) => {
+        const engine = new StaffGraphqlServerEngine(factoryParams)
 
-      expect(actual)
-        .toEqual(expected)
+        const actual = engine.collectMiddleware()
+
+        expect(actual)
+          .toHaveProperty(params.middlewareNamePath, expected)
+      })
+    })
+  })
+})
+
+describe('StaffGraphqlServerEngine', () => {
+  describe('#collectMiddleware()', () => {
+    describe('to hold those five middleware and no sixth', () => {
+      const cases = [
+        {
+          factoryParams: {
+            config: /** @type {*} */ ({
+              staticPath: rootPath.to('public/'),
+            }),
+            share: /** @type {*} */ ({}),
+            errorHash: {},
+          },
+          expected: 5,
+        },
+        {
+          factoryParams: {
+            config: /** @type {*} */ ({
+              staticPath: rootPath.to('public/second-stand-in/'),
+            }),
+            share: /** @type {*} */ ({}),
+            errorHash: {},
+          },
+          expected: 5,
+        },
+      ]
+
+      test.each(cases)('config.staticPath: $factoryParams.config.staticPath', ({
+        factoryParams,
+        expected,
+      }) => {
+        const engine = new StaffGraphqlServerEngine(factoryParams)
+
+        const actual = engine.collectMiddleware()
+
+        expect(actual)
+          .toHaveLength(expected)
+      })
+    })
+  })
+})
+
+describe('StaffGraphqlServerEngine', () => {
+  describe('#collectMiddleware()', () => {
+    /*
+     * The deliberate omission this engine documents: neither body parser is handed a `verify`
+     * callback stashing a `rawBody`, where the two older engines hand one to both. An exact
+     * `toHaveBeenCalledWith` is what notices the day somebody adds one back.
+     */
+    describe('to hand neither body parser a rawBody verify callback', () => {
+      const cases = [
+        {
+          factoryParams: {
+            config: /** @type {*} */ ({
+              staticPath: rootPath.to('public/'),
+            }),
+            share: /** @type {*} */ ({}),
+            errorHash: {},
+          },
+          expected: {
+            jsonArguments: {
+              limit: '10mb',
+            },
+            urlencodedArguments: {
+              extended: true,
+            },
+          },
+        },
+        {
+          factoryParams: {
+            config: /** @type {*} */ ({
+              staticPath: rootPath.to('public/second-stand-in/'),
+            }),
+            share: /** @type {*} */ ({}),
+            errorHash: {},
+          },
+          expected: {
+            jsonArguments: {
+              limit: '10mb',
+            },
+            urlencodedArguments: {
+              extended: true,
+            },
+          },
+        },
+      ]
+
+      test.each(cases)('config.staticPath: $factoryParams.config.staticPath', ({
+        factoryParams,
+        expected,
+      }) => {
+        const engine = new StaffGraphqlServerEngine(factoryParams)
+        const jsonSpy = jest.spyOn(express, 'json')
+        const urlencodedSpy = jest.spyOn(express, 'urlencoded')
+
+        engine.collectMiddleware()
+
+        expect(jsonSpy)
+          .toHaveBeenCalledWith(expected.jsonArguments)
+        expect(urlencodedSpy)
+          .toHaveBeenCalledWith(expected.urlencodedArguments)
+      })
+    })
+  })
+})
+
+describe('StaffGraphqlServerEngine', () => {
+  describe('#collectMiddleware()', () => {
+    describe('to mount the static directory the config names', () => {
+      const cases = [
+        {
+          factoryParams: {
+            config: /** @type {*} */ ({
+              staticPath: rootPath.to('public/'),
+            }),
+            share: /** @type {*} */ ({}),
+            errorHash: {},
+          },
+          expected: rootPath.to('public/'),
+        },
+        {
+          factoryParams: {
+            config: /** @type {*} */ ({
+              staticPath: rootPath.to('public/second-stand-in/'),
+            }),
+            share: /** @type {*} */ ({}),
+            errorHash: {},
+          },
+          expected: rootPath.to('public/second-stand-in/'),
+        },
+      ]
+
+      test.each(cases)('config.staticPath: $factoryParams.config.staticPath', ({
+        factoryParams,
+        expected,
+      }) => {
+        const engine = new StaffGraphqlServerEngine(factoryParams)
+        const staticSpy = jest.spyOn(express, 'static')
+
+        engine.collectMiddleware()
+
+        expect(staticSpy)
+          .toHaveBeenCalledWith(expected)
+      })
     })
   })
 })
@@ -555,17 +957,45 @@ describe('StaffGraphqlServerEngine', () => {
 
 describe('StaffGraphqlServerEngine', () => {
   describe('#collectScalars()', () => {
-    test('to be fixed value', async () => {
-      const engine = await StaffGraphqlServerEngine.createAsync()
-
-      const expected = [
-        DateTimeScalar,
+    describe('to be fixed value', () => {
+      const cases = [
+        {
+          factoryParams: {
+            config: /** @type {*} */ ({
+              graphqlEndpoint: '/graphql-staff',
+            }),
+            share: /** @type {*} */ ({}),
+            errorHash: {},
+          },
+          expected: [
+            DateTimeScalar,
+          ],
+        },
+        {
+          factoryParams: {
+            config: /** @type {*} */ ({
+              graphqlEndpoint: '/graphql-staff-second-stand-in',
+            }),
+            share: /** @type {*} */ ({}),
+            errorHash: {},
+          },
+          expected: [
+            DateTimeScalar,
+          ],
+        },
       ]
 
-      const actual = await engine.collectScalars()
+      test.each(cases)('config.graphqlEndpoint: $factoryParams.config.graphqlEndpoint', async ({
+        factoryParams,
+        expected,
+      }) => {
+        const engine = new StaffGraphqlServerEngine(factoryParams)
 
-      expect(actual)
-        .toEqual(expected)
+        const actual = await engine.collectScalars()
+
+        expect(actual)
+          .toEqual(expected)
+      })
     })
   })
 })

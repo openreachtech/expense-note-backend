@@ -56,13 +56,12 @@ describe('StaffGraphqlContext', () => {
     describe('to return #userEntity', () => {
       const cases = [
         {
-          params: {
+          factoryParams: {
             expressRequest: /** @type {*} */ ({}),
             requestParams: /** @type {*} */ ({}),
             engine: /** @type {*} */ ({}),
             userEntity: /** @type {*} */ ({
-              label: 'staffMemberSigningInFirst',
-              alpha: Symbol('alpha'),
+              id: 10100009,
             }),
             visa: /** @type {*} */ ({}),
             requestedAt: new Date('2026-09-01T01:02:03.004Z'),
@@ -70,13 +69,12 @@ describe('StaffGraphqlContext', () => {
           },
         },
         {
-          params: {
+          factoryParams: {
             expressRequest: /** @type {*} */ ({}),
             requestParams: /** @type {*} */ ({}),
             engine: /** @type {*} */ ({}),
             userEntity: /** @type {*} */ ({
-              label: 'staffMemberSigningInSecond',
-              beta: Symbol('beta'),
+              id: 10100010,
             }),
             visa: /** @type {*} */ ({}),
             requestedAt: new Date('2026-09-02T05:06:07.008Z'),
@@ -85,15 +83,15 @@ describe('StaffGraphqlContext', () => {
         },
       ]
 
-      test.each(cases)('$params.userEntity.label', ({
-        params,
+      test.each(cases)('userEntity.id: $factoryParams.userEntity.id', ({
+        factoryParams,
       }) => {
-        const context = new StaffGraphqlContext(params)
+        const context = new StaffGraphqlContext(factoryParams)
 
         const actual = context.staffMember
 
         expect(actual)
-          .toBe(params.userEntity) // same reference
+          .toBe(factoryParams.userEntity) // same reference
       })
     })
   })
@@ -104,7 +102,7 @@ describe('StaffGraphqlContext', () => {
     describe('to return null on a request that carried no live access token', () => {
       const cases = [
         {
-          params: {
+          factoryParams: {
             expressRequest: /** @type {*} */ ({}),
             requestParams: /** @type {*} */ ({}),
             engine: /** @type {*} */ ({}),
@@ -115,7 +113,7 @@ describe('StaffGraphqlContext', () => {
           },
         },
         {
-          params: {
+          factoryParams: {
             expressRequest: /** @type {*} */ ({}),
             requestParams: /** @type {*} */ ({}),
             engine: /** @type {*} */ ({}),
@@ -127,10 +125,10 @@ describe('StaffGraphqlContext', () => {
         },
       ]
 
-      test.each(cases)('requestedAt: $params.requestedAt', ({
-        params,
+      test.each(cases)('requestedAt: $factoryParams.requestedAt', ({
+        factoryParams,
       }) => {
-        const context = new StaffGraphqlContext(params)
+        const context = new StaffGraphqlContext(factoryParams)
 
         const actual = context.staffMember
 
@@ -146,7 +144,7 @@ describe('StaffGraphqlContext', () => {
     describe('to return #userId', () => {
       const cases = [
         {
-          params: {
+          factoryParams: {
             expressRequest: /** @type {*} */ ({}),
             requestParams: /** @type {*} */ ({}),
             engine: /** @type {*} */ ({}),
@@ -160,7 +158,7 @@ describe('StaffGraphqlContext', () => {
           expected: 10100001,
         },
         {
-          params: {
+          factoryParams: {
             expressRequest: /** @type {*} */ ({}),
             requestParams: /** @type {*} */ ({}),
             engine: /** @type {*} */ ({}),
@@ -175,11 +173,11 @@ describe('StaffGraphqlContext', () => {
         },
       ]
 
-      test.each(cases)('userEntity.id: $params.userEntity.id', ({
-        params,
+      test.each(cases)('userEntity.id: $factoryParams.userEntity.id', ({
+        factoryParams,
         expected,
       }) => {
-        const context = new StaffGraphqlContext(params)
+        const context = new StaffGraphqlContext(factoryParams)
 
         const actual = context.staffMemberId
 
@@ -195,7 +193,7 @@ describe('StaffGraphqlContext', () => {
     describe('to return null on a request that carried no live access token', () => {
       const cases = [
         {
-          params: {
+          factoryParams: {
             expressRequest: /** @type {*} */ ({}),
             requestParams: /** @type {*} */ ({}),
             engine: /** @type {*} */ ({}),
@@ -206,7 +204,7 @@ describe('StaffGraphqlContext', () => {
           },
         },
         {
-          params: {
+          factoryParams: {
             expressRequest: /** @type {*} */ ({}),
             requestParams: /** @type {*} */ ({}),
             engine: /** @type {*} */ ({}),
@@ -218,10 +216,10 @@ describe('StaffGraphqlContext', () => {
         },
       ]
 
-      test.each(cases)('requestedAt: $params.requestedAt', ({
-        params,
+      test.each(cases)('requestedAt: $factoryParams.requestedAt', ({
+        factoryParams,
       }) => {
-        const context = new StaffGraphqlContext(params)
+        const context = new StaffGraphqlContext(factoryParams)
 
         const actual = context.staffMemberId
 

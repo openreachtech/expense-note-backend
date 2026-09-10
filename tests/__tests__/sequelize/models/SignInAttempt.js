@@ -76,9 +76,9 @@ describe('SignInAttempt', () => {
       test('to hold no association', () => {
         const expected = {}
 
-        const actual = SignInAttempt.associations
+        SignInAttempt.associate()
 
-        expect(actual)
+        expect(SignInAttempt.associations)
           .toEqual(expected)
       })
     })
@@ -128,6 +128,52 @@ describe('SignInAttempt', () => {
             },
           },
           expected: 'carla.di-marco+notes@sub.example.com',
+        },
+      ]
+
+      test.each(cases)('attributes.email: $params.attributes.email', ({
+        params,
+        expected,
+      }) => {
+        const entity = SignInAttempt.build(params.attributes)
+
+        SignInAttempt.normalizeEmailOfEntity({
+          entity,
+        })
+
+        expect(entity.get('email'))
+          .toBe(expected)
+      })
+    })
+  })
+})
+
+describe('SignInAttempt', () => {
+  describe('.normalizeEmailOfEntity()', () => {
+    /*
+     * The address the sign-in limit counts by is written through this normalizer on every path, so
+     * a row already holding its normalized form has to come back out of it untouched. A normalizer
+     * that mangles what is already canonical would split one address into two counts.
+     */
+    describe('should leave an address already in its normalized form as it stands', () => {
+      const cases = [
+        {
+          params: {
+            attributes: {
+              email: 'frida@example.com',
+              attemptedAt: new Date('2026-09-10T10:11:12.013Z'),
+            },
+          },
+          expected: 'frida@example.com',
+        },
+        {
+          params: {
+            attributes: {
+              email: 'gino.di-luca+notes@sub.example.com',
+              attemptedAt: new Date('2026-09-11T11:12:13.014Z'),
+            },
+          },
+          expected: 'gino.di-luca+notes@sub.example.com',
         },
       ]
 
@@ -246,10 +292,12 @@ describe('SignInAttempt', () => {
           params: {
             attributes: {
               attemptedAt: new Date('2026-09-08T08:09:10.011Z'),
+              // email: undefined
             },
           },
           expected: {
             attemptedAt: new Date('2026-09-08T08:09:10.011Z'),
+            // email: undefined
           },
         },
         {
