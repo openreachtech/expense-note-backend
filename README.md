@@ -18,7 +18,7 @@ A running skeleton for a [renchan](https://github.com/openreachtech/renchan) app
 
 renchan is an Express-based framework that builds GraphQL and RESTful API endpoints from template classes. This repository is the starting point for an application built on it.
 
-It is not an empty directory. Clone it, install, and three servers already listen, each answering a `healthCheck` query; Sequelize already activates against SQLite; and the classes that hold a session's access and refresh tokens are already written. What is left is the application's own schema, resolvers and models.
+It is not an empty directory. Clone it, install, and the boilerplate's own servers already listen, each answering a `healthCheck` query; Sequelize already activates against SQLite; and the classes that hold a session's access and refresh tokens are already written. What is left is the application's own schema, resolvers and models.
 
 ## Installation
 
@@ -40,19 +40,20 @@ The project is an ES module (`"type": "module"`); write imports with ESM `import
 
 ## Usage
 
-### The three servers
+### The servers
 
-`server/index.js` starts all three, each on its own port.
+`server/index.js` starts every one of them by hand — there is no scanning — each on its own port.
 
-| server | port | endpoint | engine |
-| :-- | :-- | :-- | :-- |
-| GraphQL for customers | 3900 | `/graphql-customer` | `CustomerGraphqlServerEngine` |
-| GraphQL for admins | 5800 | `/graphql-admin` | `AdminGraphqlServerEngine` |
-| RESTful API | 8001 | `/v1` | `AppRestfulApiServerEngine` |
+| server | port | endpoint | engine | health check |
+| :-- | :-- | :-- | :-- | :-- |
+| GraphQL for staff | 4900 | `/graphql-staff` | `StaffGraphqlServerEngine` | **no** |
+| GraphQL for customers | 3900 | `/graphql-customer` | `CustomerGraphqlServerEngine` | yes |
+| GraphQL for admins | 5800 | `/graphql-admin` | `AdminGraphqlServerEngine` | yes |
+| RESTful API | 8001 | `/v1` | `AppRestfulApiServerEngine` | — |
 
-Every one of them binds to `127.0.0.1` alone. They are meant to sit behind a reverse proxy, so no other network interface accepts a connection.
+**The staff audience is this product's own; the other three ship with the boilerplate.** The spec declares one server, `staff-graphql`, and the operations it serves are the complete list — which is why it is also the one GraphQL endpoint that answers **no** health check. A fully public operation nobody declared would falsify the spec's rule that every operation authenticates by one of two credentials, so the absence is deliberate. **Do not add one.**
 
-Each GraphQL endpoint answers a health check out of the box.
+Every server binds to `127.0.0.1` alone. They are meant to sit behind a reverse proxy, so no other network interface accepts a connection.
 
 ```sh
 curl -X POST http://127.0.0.1:3900/graphql-customer \
@@ -108,12 +109,12 @@ npm test -- --empty
 │   ├── restfulapi/
 │   │   ├── renderers/      # write the renderers here
 │   │   └── AppRestfulApiServerEngine.js
-│   └── index.js            # the three servers and their ports
+│   └── index.js            # every server and its port
 ├── tests/                  # Jest tests
 └── types/                  # ambient type declarations
 ```
 
-Three places are marked in the code as waiting for the application.
+Some places are marked in the code as waiting for the application — `git grep 'TODO: Must fulfill'` lists every one, including any audience added since.
 
 | what | where |
 | :-- | :-- |
@@ -180,7 +181,7 @@ The single window onto a session's data — every read and write across the tabl
 | `#rotateSession()` | Spend the presented refresh token and issue the next pair in the same series |
 | `#revokeSession()` | Revoke a whole series, and report how much it removed |
 
-The models are injected rather than imported, so both audiences share one implementation.
+The models are injected rather than imported, so every audience shares one implementation.
 
 ```js
 const sessionClerk = SessionClerk.create({
@@ -210,7 +211,7 @@ A session is a pair of tokens, minted from `crypto.randomBytes()` rather than fr
 
 The two halves are stored differently. A refresh token is stored as a SHA-256 digest, because it is the long-lived half and a leaked dump would otherwise be a set of working sessions; the lookup hashes what arrives and matches on that. An access token is stored as it is, since it expires in minutes and hashing it would cost a digest on every single request.
 
-The refresh token reaches the browser as an `HttpOnly` cookie, and each audience holds its own under its own name — `customer_refresh_token` and `admin_refresh_token` — scoped to that audience's endpoint path, so a customer's cookie is never even sent to the admin endpoint. The cookie names no domain, on purpose: naming one widens the cookie to every subdomain, and one XSS on any of them would reach it.
+The refresh token reaches the browser as an `HttpOnly` cookie, and each audience holds its own under its own name, declared in `constants/authConstants.cjs`, scoped to that audience's endpoint path — so one audience's cookie is never even sent to another's endpoint. The cookie names no domain, on purpose: naming one widens the cookie to every subdomain, and one XSS on any of them would reach it.
 
 The cookie's configuration lives in `BaseAppGraphqlServerEngine`, and the cookie itself is written through `RefreshTokenExpressCookieClerk` — a resolver that manages a session builds one from its context, and every other resolver never touches the cookie.
 

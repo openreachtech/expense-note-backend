@@ -18,7 +18,7 @@
 
 renchan は、テンプレートクラスから GraphQL / RESTful API のエンドポイントを組み立てる、Express ベースのフレームワークです。本リポジトリは、その上に作るアプリケーションの出発点です。
 
-空のディレクトリではありません。クローンして install すれば、3 つのサーバーがすでに待ち受け、それぞれが `healthCheck` クエリに応答します。Sequelize は SQLite に対してすでに起動し、セッションのアクセストークンとリフレッシュトークンを扱うクラスも書かれています。残っているのは、アプリケーション固有のスキーマ・リゾルバー・モデルです。
+空のディレクトリではありません。クローンして install すれば、ボイラープレート自身のサーバーがすでに待ち受け、それぞれが `healthCheck` クエリに応答します。Sequelize は SQLite に対してすでに起動し、セッションのアクセストークンとリフレッシュトークンを扱うクラスも書かれています。残っているのは、アプリケーション固有のスキーマ・リゾルバー・モデルです。
 
 ## インストール
 
@@ -40,19 +40,20 @@ ES モジュール（`"type": "module"`）です。import は ESM の `import` �
 
 ## 使い方
 
-### 3 つのサーバー
+### サーバー
 
-`server/index.js` が、それぞれ別のポートで 3 つすべてを起動します。
+`server/index.js` が、それぞれ別のポートですべてを手書きで起動します。スキャンはしません。
 
-| サーバー | ポート | エンドポイント | エンジン |
-| :-- | :-- | :-- | :-- |
-| 顧客向け GraphQL | 3900 | `/graphql-customer` | `CustomerGraphqlServerEngine` |
-| 管理者向け GraphQL | 5800 | `/graphql-admin` | `AdminGraphqlServerEngine` |
-| RESTful API | 8001 | `/v1` | `AppRestfulApiServerEngine` |
+| サーバー | ポート | エンドポイント | エンジン | ヘルスチェック |
+| :-- | :-- | :-- | :-- | :-- |
+| 社員向け GraphQL | 4900 | `/graphql-staff` | `StaffGraphqlServerEngine` | **なし** |
+| 顧客向け GraphQL | 3900 | `/graphql-customer` | `CustomerGraphqlServerEngine` | あり |
+| 管理者向け GraphQL | 5800 | `/graphql-admin` | `AdminGraphqlServerEngine` | あり |
+| RESTful API | 8001 | `/v1` | `AppRestfulApiServerEngine` | — |
+
+**社員向けのオーディエンスがこのプロダクト自身のもので、他の 3 つはボイラープレート由来です。** 仕様が宣言するサーバーは `staff-graphql` の 1 つだけで、そこが提供するオペレーションの一覧は完全です。だからここだけはヘルスチェックに**応答しません**。誰も宣言していない完全公開のオペレーションがあると、「すべてのオペレーションは 2 種の認証情報のいずれかで認証する」という仕様の規則が崩れます。意図的な不在ですので、**追加しないでください。**
 
 いずれも `127.0.0.1` だけにバインドします。リバースプロキシの背後に置く前提なので、他のネットワークインターフェイスからの接続は受け付けません。
-
-各 GraphQL エンドポイントは、そのままヘルスチェックに応答します。
 
 ```sh
 curl -X POST http://127.0.0.1:3900/graphql-customer \
@@ -108,12 +109,12 @@ npm test -- --empty
 │   ├── restfulapi/
 │   │   ├── renderers/      # レンダラーはここに書く
 │   │   └── AppRestfulApiServerEngine.js
-│   └── index.js            # 3 つのサーバーとそのポート
+│   └── index.js            # 各サーバーとそのポート
 ├── tests/                  # Jest のテスト
 └── types/                  # アンビエントな型宣言
 ```
 
-アプリケーションによる実装を待っている箇所が、コード中に 3 つ示されています。
+アプリケーションによる実装を待っている箇所がコード中に示されています。`git grep 'TODO: Must fulfill'` で、後から追加したオーディエンスを含むすべてが列挙されます。
 
 | 対象 | 場所 |
 | :-- | :-- |
@@ -180,7 +181,7 @@ development はファイル 1 つで動くため、`npm run db:refresh` はデ�
 | `#rotateSession()` | 提示されたリフレッシュトークンを使い切り、同じ系列の次のペアを発行する |
 | `#revokeSession()` | 系列ごと失効させ、何件を除去したかを報告する |
 
-モデルは import ではなく注入されるため、2 つの対象者が 1 つの実装を共有できます。
+モデルは import でなく注入されるため、すべての対象者が 1 つの実装を共有できます。
 
 ```js
 const sessionClerk = SessionClerk.create({
@@ -210,7 +211,7 @@ const credentialPair = savingResult.credentialPair
 
 2 つの半分は、保存の仕方が異なります。リフレッシュトークンは SHA-256 のダイジェストで保存します。長命な側であり、データベースのダンプが漏れれば、そのまま使えるセッションの一覧になってしまうからです。検索時は届いた値をハッシュして突き合わせます。アクセストークンはそのまま保存します。数分で失効する一方、ハッシュ化すればリクエストごとにダイジェスト計算を払うことになるからです。
 
-リフレッシュトークンは `HttpOnly` の Cookie としてブラウザーに届きます。対象者ごとに別名の Cookie を持ち（`customer_refresh_token` と `admin_refresh_token`）、それぞれのエンドポイントのパスにスコープされます。そのため顧客の Cookie が管理者エンドポイントに送られること自体がありません。Cookie はドメインを指定しません。意図的です。ドメインを名指しすると Cookie が全サブドメインに広がり、そのどれか 1 つでの XSS が届いてしまいます。
+リフレッシュトークンは `HttpOnly` の Cookie としてブラウザーに届きます。対象者ごとに別名の Cookie を持ち、その名前は `constants/authConstants.cjs` で宣言します。それぞれのエンドポイントのパスにスコープされるので、ある対象者の Cookie が別のエンドポイントに送られること自体がありません。Cookie はドメインを指定しません。意図的です。ドメインを名指しすると Cookie が全サブドメインに広がり、そのどれか 1 つでの XSS が届いてしまいます。
 
 Cookie の設定は `BaseAppGraphqlServerEngine` にあり、Cookie 自体は `RefreshTokenExpressCookieClerk` を通して書き込まれます。セッションを扱うリゾルバーが、受け取った context から clerk を組み立てて操作し、それ以外のリゾルバーは Cookie に触れません。
 
