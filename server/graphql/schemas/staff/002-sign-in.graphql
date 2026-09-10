@@ -1,0 +1,71 @@
+################################################################################
+#### Signing in, renewing, signing out, and asking who is signed in
+####
+#### spec 1.0.0 section 10.1 is the complete operation list of this domain, and
+#### every type below is taken verbatim from the pinned contract at
+#### .hora/contracts/1.0.0/staff-graphql.graphql.
+####
+#### There is deliberately no `healthCheck` here, nor anywhere else in this
+#### audience. Section 7's Authentication row reads "every operation
+#### authenticates by one of two credentials", and a fully public operation
+#### nobody declared would make that false.
+################################################################################
+
+################################################################################
+#### QUERY
+################################################################################
+
+type Query {
+  signedInStaffMember: SignedInStaffMemberResult!
+}
+
+################################################################################
+#### MUTATION
+################################################################################
+
+type Mutation {
+  signIn(input: SignInInput!): SignInResult!
+  signOut: SignOutResult!
+  renewAccessToken: RenewAccessTokenResult!
+}
+
+################################################################################
+#### INPUT
+################################################################################
+
+input SignInInput {
+  email: String!
+  password: String!
+}
+
+# The spec declares SignOutInput(), RenewAccessTokenInput() and
+# SignedInStaffMemberInput() — each an input with no fields. The convention gives an operation
+# with no input no argument at all, so none of the three is declared here.
+
+################################################################################
+#### TYPE
+################################################################################
+
+# Returns the short-lived access token in the body; the refresh token goes into an httpOnly
+# cookie and never appears in a response (spec 10.1).
+type SignInResult {
+  staffMemberId: Int!
+  accessToken: String!
+}
+
+type SignOutResult {
+  signedOut: Boolean!
+}
+
+# The refresh-token cookie carries everything this operation needs, which is why it is
+# reachable without a session.
+type RenewAccessTokenResult {
+  accessToken: String!
+}
+
+# The operation answers about the caller and nobody else.
+type SignedInStaffMemberResult {
+  staffMemberId: Int!
+  name: String!
+  email: String!
+}
