@@ -1,6 +1,6 @@
 # renchan-boilerplate
 
-A running skeleton for a [renchan](https://github.com/openreachtech/renchan) application — two GraphQL endpoints, a RESTful API endpoint, and Sequelize, already wired together.
+A running skeleton for a [renchan](https://github.com/openreachtech/renchan) application — GraphQL and RESTful API endpoints, and Sequelize, already wired together.
 
 ## Table of contents
 

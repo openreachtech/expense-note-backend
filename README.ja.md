@@ -1,6 +1,6 @@
 # renchan-boilerplate
 
-[renchan](https://github.com/openreachtech/renchan) アプリケーションの動くスケルトンです。2 つの GraphQL エンドポイント、RESTful API エンドポイント、そして Sequelize が、すでに組み上がっています。
+[renchan](https://github.com/openreachtech/renchan) アプリケーションの動くスケレトンです。GraphQL と RESTful API のエンドポイント、そして Sequelize が、すでに組み上がっています。
 
 ## 目次
 
