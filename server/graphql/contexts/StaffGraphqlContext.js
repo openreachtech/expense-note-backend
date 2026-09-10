@@ -55,6 +55,7 @@ export default class StaffGraphqlContext extends BaseAppGraphqlContext {
     accessToken,
     requestedAt,
   }) {
+    // TODO: Must fulfill this method. See the three obligations in the docblock above.
     return super.findUser({
       expressRequest,
       accessToken,

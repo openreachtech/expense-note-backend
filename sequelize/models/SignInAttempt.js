@@ -104,8 +104,9 @@ export default class SignInAttempt extends BaseAppRenchanModel {
    * it runs `beforeUpsert` alone, so an address written that way would reach the table
    * un-normalized. Nothing calls it; adding a caller means adding the hook first.
    *
-   * A hook cannot normalize a **read**, so the code counting attempts normalizes the address
-   * it counts by before it queries. This covers the write side only.
+   * **This covers the write side only, and a hook cannot normalize a read.** So the code that
+   * counts attempts — checkpoint 5's, which does not exist yet — must normalize the address it
+   * counts by before it queries, or it will count against a value no row holds.
    *
    * @returns {void}
    */
@@ -197,8 +198,11 @@ export default class SignInAttempt extends BaseAppRenchanModel {
   /**
    * get: The model defining what an address's normalized form is
    *
-   * The one place this model couples to that definition. Reached through `this._` rather than
-   * imported, because importing another model directly is a circular dependency.
+   * The one place this model couples to that definition. Reached through `this._` — the model
+   * registry the base class exposes — rather than by importing `StaffMemberSecret` directly,
+   * because a model is resolved through the registry the activator populates. A direct import
+   * would not be circular for this particular pair today, and that is not the reason: the
+   * registry is how every model in this tree reaches another one.
    *
    * @returns {typeof import('./StaffMemberSecret.js').default} Model declaration.
    */

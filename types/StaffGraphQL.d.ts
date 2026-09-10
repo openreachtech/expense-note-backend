@@ -6,9 +6,16 @@ declare global {
   //
   // Every interface below mirrors, field for field, the SDL under
   // server/graphql/schemas/staff/ — which is itself taken from the pinned contract at
-  // .hora/contracts/1.0.0/staff-graphql.graphql. A non-null SDL field is a required property; a
-  // nullable one is declared `| null`, never optional, so a missing value is always a written
-  // value.
+  // .hora/contracts/1.0.0/staff-graphql.graphql.
+  //
+  // A non-null SDL field is a required property. A nullable one depends on which direction it
+  // travels, and the two are not the same:
+  //
+  //   - in a RESULT type, `| null` and never optional — the server always writes the field, so
+  //     a missing value is a written null and a reader never has to tell absent from empty
+  //   - in an INPUT type, `?` as well as `| null` — a caller may omit the field entirely, and
+  //     an omitted GraphQL input field arrives as `undefined`, not as `null`. Declaring it
+  //     non-optional would forbid a value the schema permits
   namespace server.graphql.staff {
     ////////////////////////////////////////////////////////////////////////////
     //// The shared block — 001-common.graphql
@@ -36,7 +43,7 @@ declare global {
     interface PaginationInput {
       limit: number
       offset: number
-      sort: SortInput | null
+      sort?: SortInput | null
     }
 
     ////////////////////////////////////////////////////////////////////////////
