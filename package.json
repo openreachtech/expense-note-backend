@@ -40,6 +40,7 @@
     "@openreachtech/renchan-env": "^1.0.5",
     "@openreachtech/renchan-sequelize": "^2.2.2",
     "@steweucen/fertile-forest-sequelize": "^0.1.3",
+    "bcryptjs": "^3.0.3",
     "cookie": "^0.7.1",
     "cors": "^2.8.5",
     "express": "^4.21.2",
