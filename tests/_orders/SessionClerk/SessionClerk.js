@@ -27,7 +27,6 @@ describe('SessionClerk', () => {
               name: 'staff member holding a live access token 10100221',
             },
             accessTokenRecord: {
-              id: 10100201,
               StaffMemberId: 10100221,
               accessToken: 'access-token-0201',
               sessionKey: 'session-key-0201',
@@ -37,7 +36,7 @@ describe('SessionClerk', () => {
             pointsAt: new Date('2026-09-01T10:14:59.999Z'), // one millisecond of life left
           },
           expected: expect.objectContaining({
-            id: 10100201,
+            id: expect.any(Number),
             accessToken: 'access-token-0201',
             sessionKey: 'session-key-0201',
           }),
@@ -49,7 +48,6 @@ describe('SessionClerk', () => {
               name: 'staff member holding a freshly issued access token 10100222',
             },
             accessTokenRecord: {
-              id: 10100202,
               StaffMemberId: 10100222,
               accessToken: 'access-token-0202',
               sessionKey: 'session-key-0202',
@@ -59,14 +57,14 @@ describe('SessionClerk', () => {
             pointsAt: new Date('2026-09-02T11:00:00.000Z'), // the instant it was issued
           },
           expected: expect.objectContaining({
-            id: 10100202,
+            id: expect.any(Number),
             accessToken: 'access-token-0202',
             sessionKey: 'session-key-0202',
           }),
         },
       ]
 
-      test.each(cases)('accessTokenRecord.id: $params.accessTokenRecord.id', async ({
+      test.each(cases)('accessTokenRecord.accessToken: $params.accessTokenRecord.accessToken', async ({
         params,
         expected,
       }) => {
@@ -102,7 +100,6 @@ describe('SessionClerk', () => {
               name: 'staff member holding an access token at its expiry 10100223',
             },
             accessTokenRecord: {
-              id: 10100203,
               StaffMemberId: 10100223,
               accessToken: 'access-token-0203',
               sessionKey: 'session-key-0203',
@@ -119,7 +116,6 @@ describe('SessionClerk', () => {
               name: 'staff member holding an access token past its expiry 10100224',
             },
             accessTokenRecord: {
-              id: 10100204,
               StaffMemberId: 10100224,
               accessToken: 'access-token-0204',
               sessionKey: 'session-key-0204',
@@ -131,7 +127,7 @@ describe('SessionClerk', () => {
         },
       ]
 
-      test.each(cases)('accessTokenRecord.id: $params.accessTokenRecord.id', async ({
+      test.each(cases)('accessTokenRecord.accessToken: $params.accessTokenRecord.accessToken', async ({
         params,
       }) => {
         await StaffMember.create(params.staffMember)
@@ -166,7 +162,6 @@ describe('SessionClerk', () => {
               name: 'staff member whose live token is not the one presented 10100225',
             },
             accessTokenRecord: {
-              id: 10100205,
               StaffMemberId: 10100225,
               accessToken: 'access-token-0205',
               sessionKey: 'session-key-0205',
@@ -184,7 +179,6 @@ describe('SessionClerk', () => {
               name: 'staff member whose live token is not the other one presented 10100226',
             },
             accessTokenRecord: {
-              id: 10100206,
               StaffMemberId: 10100226,
               accessToken: 'access-token-0206',
               sessionKey: 'session-key-0206',
@@ -267,7 +261,6 @@ describe('SessionClerk', () => {
               name: 'staff member holding a long expired access token 10100227',
             },
             accessTokenRecord: {
-              id: 10100207,
               StaffMemberId: 10100227,
               accessToken: 'access-token-0207',
               sessionKey: 'session-key-0207',
@@ -276,7 +269,7 @@ describe('SessionClerk', () => {
             },
           },
           expected: expect.objectContaining({
-            id: 10100207,
+            id: expect.any(Number),
             accessToken: 'access-token-0207',
             expiredAt: new Date('2026-09-08T17:15:00.000Z'),
           }),
@@ -288,7 +281,6 @@ describe('SessionClerk', () => {
               name: 'staff member holding another expired access token 10100228',
             },
             accessTokenRecord: {
-              id: 10100208,
               StaffMemberId: 10100228,
               accessToken: 'access-token-0208',
               sessionKey: 'session-key-0208',
@@ -297,14 +289,14 @@ describe('SessionClerk', () => {
             },
           },
           expected: expect.objectContaining({
-            id: 10100208,
+            id: expect.any(Number),
             accessToken: 'access-token-0208',
             expiredAt: new Date('2026-09-09T18:15:00.000Z'),
           }),
         },
       ]
 
-      test.each(cases)('accessTokenRecord.id: $params.accessTokenRecord.id', async ({
+      test.each(cases)('accessTokenRecord.accessToken: $params.accessTokenRecord.accessToken', async ({
         params,
         expected,
       }) => {
@@ -339,7 +331,6 @@ describe('SessionClerk', () => {
               name: 'staff member whose row is not the one asked for 10100229',
             },
             accessTokenRecord: {
-              id: 10100209,
               StaffMemberId: 10100229,
               accessToken: 'access-token-0209',
               sessionKey: 'session-key-0209',
@@ -356,7 +347,6 @@ describe('SessionClerk', () => {
               name: 'staff member whose row is not the other one asked for 10100230',
             },
             accessTokenRecord: {
-              id: 10100210,
               StaffMemberId: 10100230,
               accessToken: 'access-token-0210',
               sessionKey: 'session-key-0210',

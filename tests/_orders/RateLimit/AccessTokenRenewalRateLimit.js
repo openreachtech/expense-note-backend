@@ -1,3 +1,17 @@
+/*
+ * The seeded rows carry NO explicit `id`, and that is deliberate.
+ *
+ * `staff_member_refresh_tokens` is a table the product itself writes — signIn and renewAccessToken mint a refresh token — with an
+ * auto-incremented id, which is `max(id) + 1`. `tests/_orders/` suites share one database and jest
+ * runs them concurrently, so an explicit id inserted here sets the max that the product's next
+ * insert takes, and that insert takes the id the next case in this file wanted. The run then fails
+ * with a UNIQUE violation on a row nothing else had written, on whichever case lost the race.
+ *
+ * No id block can fix it: the block's own first insert is what hands the auto-increment writer the
+ * block's second id. The ids are left to the database, and these cases never needed one — each is
+ * told apart by its key, and isolated from the product's own rows by using an address of its own.
+ */
+
 import AccessTokenRenewalRateLimit from '../../../app/tools/rateLimit/limits/AccessTokenRenewalRateLimit.js'
 
 import StaffMemberRefreshToken from '../../../sequelize/models/StaffMemberRefreshToken.js'
@@ -14,7 +28,6 @@ describe('AccessTokenRenewalRateLimit', () => {
             key: 'renewal-limit-series-0001',
             refreshTokens: [
               {
-                id: 10100301,
                 StaffMemberId: 10100300,
                 tokenHash: 'renewal-limit-token-hash-0001',
                 sessionKey: 'renewal-limit-series-0001',
@@ -24,7 +37,6 @@ describe('AccessTokenRenewalRateLimit', () => {
                 expiredAt: new Date('2026-10-04T08:50:00.000Z'),
               },
               {
-                id: 10100302,
                 StaffMemberId: 10100300,
                 tokenHash: 'renewal-limit-token-hash-0002',
                 sessionKey: 'renewal-limit-series-0001',
@@ -34,7 +46,6 @@ describe('AccessTokenRenewalRateLimit', () => {
                 expiredAt: new Date('2026-10-04T08:01:00.000Z'),
               },
               {
-                id: 10100303,
                 StaffMemberId: 10100300,
                 tokenHash: 'renewal-limit-token-hash-0003',
                 sessionKey: 'renewal-limit-series-0001',
@@ -44,7 +55,6 @@ describe('AccessTokenRenewalRateLimit', () => {
                 expiredAt: new Date('2026-10-04T07:59:00.000Z'),
               },
               {
-                id: 10100304,
                 StaffMemberId: 10100300,
                 tokenHash: 'renewal-limit-token-hash-0004',
                 sessionKey: 'renewal-limit-series-0002',
@@ -65,7 +75,6 @@ describe('AccessTokenRenewalRateLimit', () => {
             key: 'renewal-limit-series-0003',
             refreshTokens: [
               {
-                id: 10100311,
                 StaffMemberId: 10100310,
                 tokenHash: 'renewal-limit-token-hash-0011',
                 sessionKey: 'renewal-limit-series-0003',
@@ -75,7 +84,6 @@ describe('AccessTokenRenewalRateLimit', () => {
                 expiredAt: new Date('2026-10-05T14:00:00.000Z'),
               },
               {
-                id: 10100312,
                 StaffMemberId: 10100310,
                 tokenHash: 'renewal-limit-token-hash-0012',
                 sessionKey: 'renewal-limit-series-0003',
@@ -165,7 +173,6 @@ describe('AccessTokenRenewalRateLimit', () => {
             key: 'renewal-limit-series-0006',
             refreshTokens: [
               {
-                id: 10100321,
                 StaffMemberId: 10100320,
                 tokenHash: 'renewal-limit-token-hash-0021',
                 sessionKey: 'renewal-limit-series-0006',
@@ -175,7 +182,6 @@ describe('AccessTokenRenewalRateLimit', () => {
                 expiredAt: new Date('2026-10-07T08:15:00.000Z'),
               },
               {
-                id: 10100322,
                 StaffMemberId: 10100320,
                 tokenHash: 'renewal-limit-token-hash-0022',
                 sessionKey: 'renewal-limit-series-0006',
@@ -185,7 +191,6 @@ describe('AccessTokenRenewalRateLimit', () => {
                 expiredAt: new Date('2026-10-07T08:30:00.000Z'),
               },
               {
-                id: 10100323,
                 StaffMemberId: 10100320,
                 tokenHash: 'renewal-limit-token-hash-0023',
                 sessionKey: 'renewal-limit-series-0006',

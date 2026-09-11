@@ -6,36 +6,33 @@ describe('SignInAttempt', () => {
       const cases = [
         {
           params: {
-            id: 10100101,
             email: 'Anna@Example.com',
             attemptedAt: new Date('2026-09-01T01:02:03.004Z'),
           },
           expected: expect.objectContaining({
-            id: 10100101,
+            id: expect.any(Number),
             email: 'anna@example.com',
             attemptedAt: new Date('2026-09-01T01:02:03.004Z'),
           }),
         },
         {
           params: {
-            id: 10100102,
             email: 'BRUNO@EXAMPLE.COM',
             attemptedAt: new Date('2026-09-02T02:03:04.005Z'),
           },
           expected: expect.objectContaining({
-            id: 10100102,
+            id: expect.any(Number),
             email: 'bruno@example.com',
             attemptedAt: new Date('2026-09-02T02:03:04.005Z'),
           }),
         },
         {
           params: {
-            id: 10100103,
             email: 'Carla.Di-Marco+notes@Sub.Example.COM',
             attemptedAt: new Date('2026-09-03T03:04:05.006Z'),
           },
           expected: expect.objectContaining({
-            id: 10100103,
+            id: expect.any(Number),
             email: 'carla.di-marco+notes@sub.example.com',
             attemptedAt: new Date('2026-09-03T03:04:05.006Z'),
           }),
@@ -62,18 +59,16 @@ describe('SignInAttempt', () => {
         {
           params: {
             firstAttempt: {
-              id: 10100111,
               email: 'Dario@Example.com',
               attemptedAt: new Date('2026-09-04T04:05:06.007Z'),
             },
             secondAttempt: {
-              id: 10100112,
               email: 'dario@EXAMPLE.com',
               attemptedAt: new Date('2026-09-04T04:06:06.008Z'),
             },
           },
           expected: expect.objectContaining({
-            id: 10100112,
+            id: expect.any(Number),
             email: 'dario@example.com',
             attemptedAt: new Date('2026-09-04T04:06:06.008Z'),
           }),
@@ -81,18 +76,16 @@ describe('SignInAttempt', () => {
         {
           params: {
             firstAttempt: {
-              id: 10100113,
               email: 'ELENA@Example.com',
               attemptedAt: new Date('2026-09-05T05:06:07.009Z'),
             },
             secondAttempt: {
-              id: 10100114,
               email: 'Elena@example.COM',
               attemptedAt: new Date('2026-09-05T05:07:07.010Z'),
             },
           },
           expected: expect.objectContaining({
-            id: 10100114,
+            id: expect.any(Number),
             email: 'elena@example.com',
             attemptedAt: new Date('2026-09-05T05:07:07.010Z'),
           }),
@@ -122,12 +115,10 @@ describe('SignInAttempt', () => {
           params: {
             records: [
               {
-                id: 10100121,
                 email: 'Fabio@Example.com',
                 attemptedAt: new Date('2026-09-06T06:07:08.011Z'),
               },
               {
-                id: 10100122,
                 email: 'GINA@EXAMPLE.COM',
                 attemptedAt: new Date('2026-09-06T06:08:08.012Z'),
               },
@@ -135,12 +126,10 @@ describe('SignInAttempt', () => {
           },
           expected: [
             expect.objectContaining({
-              id: 10100121,
               email: 'fabio@example.com',
               attemptedAt: new Date('2026-09-06T06:07:08.011Z'),
             }),
             expect.objectContaining({
-              id: 10100122,
               email: 'gina@example.com',
               attemptedAt: new Date('2026-09-06T06:08:08.012Z'),
             }),
@@ -150,12 +139,10 @@ describe('SignInAttempt', () => {
           params: {
             records: [
               {
-                id: 10100123,
                 email: 'Hugo@Sub.Example.COM',
                 attemptedAt: new Date('2026-09-07T07:08:09.013Z'),
               },
               {
-                id: 10100124,
                 email: 'ILARIA@Example.com',
                 attemptedAt: new Date('2026-09-07T07:09:09.014Z'),
               },
@@ -163,12 +150,10 @@ describe('SignInAttempt', () => {
           },
           expected: [
             expect.objectContaining({
-              id: 10100123,
               email: 'hugo@sub.example.com',
               attemptedAt: new Date('2026-09-07T07:08:09.013Z'),
             }),
             expect.objectContaining({
-              id: 10100124,
               email: 'ilaria@example.com',
               attemptedAt: new Date('2026-09-07T07:09:09.014Z'),
             }),
@@ -196,7 +181,6 @@ describe('SignInAttempt', () => {
         {
           params: {
             currentAttempt: {
-              id: 10100131,
               email: 'luca@example.com',
               attemptedAt: new Date('2026-09-08T08:09:10.015Z'),
             },
@@ -215,7 +199,6 @@ describe('SignInAttempt', () => {
         {
           params: {
             currentAttempt: {
-              id: 10100132,
               email: 'marta@example.com',
               attemptedAt: new Date('2026-09-09T09:10:11.016Z'),
             },
@@ -235,12 +218,12 @@ describe('SignInAttempt', () => {
         params,
         expected,
       }) => {
-        await SignInAttempt.create(params.currentAttempt)
+        const currentAttempt = await SignInAttempt.create(params.currentAttempt)
         const normalizeSpy = jest.spyOn(SignInAttempt, 'normalizeEmailOfAttributes')
 
         await SignInAttempt.update(params.values, {
           where: {
-            id: params.currentAttempt.id,
+            id: currentAttempt.id,
           },
         })
 

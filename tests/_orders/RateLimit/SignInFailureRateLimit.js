@@ -1,3 +1,17 @@
+/*
+ * The seeded rows carry NO explicit `id`, and that is deliberate.
+ *
+ * `sign_in_attempts` is a table the product itself writes — signIn records a refused attempt — with an
+ * auto-incremented id, which is `max(id) + 1`. `tests/_orders/` suites share one database and jest
+ * runs them concurrently, so an explicit id inserted here sets the max that the product's next
+ * insert takes, and that insert takes the id the next case in this file wanted. The run then fails
+ * with a UNIQUE violation on a row nothing else had written, on whichever case lost the race.
+ *
+ * No id block can fix it: the block's own first insert is what hands the auto-increment writer the
+ * block's second id. The ids are left to the database, and these cases never needed one — each is
+ * told apart by its key, and isolated from the product's own rows by using an address of its own.
+ */
+
 import SignInFailureRateLimit from '../../../app/tools/rateLimit/limits/SignInFailureRateLimit.js'
 
 import SignInAttempt from '../../../sequelize/models/SignInAttempt.js'
@@ -17,22 +31,18 @@ describe('SignInFailureRateLimit', () => {
             key: 'Nadia@Example.com',
             attempts: [
               {
-                id: 10100201,
                 email: 'nadia@example.com',
                 attemptedAt: new Date('2026-09-20T08:59:00.000Z'),
               },
               {
-                id: 10100202,
                 email: 'NADIA@EXAMPLE.COM',
                 attemptedAt: new Date('2026-09-20T08:46:00.000Z'),
               },
               {
-                id: 10100203,
                 email: 'Nadia@Example.com',
                 attemptedAt: new Date('2026-09-20T08:50:00.000Z'),
               },
               {
-                id: 10100204,
                 email: 'nadia@example.com',
                 attemptedAt: new Date('2026-09-20T08:44:00.000Z'),
               },
@@ -48,12 +58,10 @@ describe('SignInFailureRateLimit', () => {
             key: 'Paola@Example.com',
             attempts: [
               {
-                id: 10100205,
                 email: 'paola@example.com',
                 attemptedAt: new Date('2026-09-21T13:45:00.000Z'),
               },
               {
-                id: 10100206,
                 email: 'PAOLA@Example.com',
                 attemptedAt: new Date('2026-09-21T13:44:59.999Z'),
               },
@@ -136,52 +144,42 @@ describe('SignInFailureRateLimit', () => {
             key: 'Sofia@Example.com',
             attempts: [
               {
-                id: 10100211,
                 email: 'sofia@example.com',
                 attemptedAt: new Date('2026-09-23T08:46:00.000Z'),
               },
               {
-                id: 10100212,
                 email: 'sofia@example.com',
                 attemptedAt: new Date('2026-09-23T08:47:00.000Z'),
               },
               {
-                id: 10100213,
                 email: 'sofia@example.com',
                 attemptedAt: new Date('2026-09-23T08:48:00.000Z'),
               },
               {
-                id: 10100214,
                 email: 'sofia@example.com',
                 attemptedAt: new Date('2026-09-23T08:49:00.000Z'),
               },
               {
-                id: 10100215,
                 email: 'sofia@example.com',
                 attemptedAt: new Date('2026-09-23T08:50:00.000Z'),
               },
               {
-                id: 10100216,
                 email: 'sofia@example.com',
                 attemptedAt: new Date('2026-09-23T08:51:00.000Z'),
               },
               {
-                id: 10100217,
                 email: 'sofia@example.com',
                 attemptedAt: new Date('2026-09-23T08:52:00.000Z'),
               },
               {
-                id: 10100218,
                 email: 'sofia@example.com',
                 attemptedAt: new Date('2026-09-23T08:53:00.000Z'),
               },
               {
-                id: 10100219,
                 email: 'sofia@example.com',
                 attemptedAt: new Date('2026-09-23T08:54:00.000Z'),
               },
               {
-                id: 10100220,
                 email: 'sofia@example.com',
                 attemptedAt: new Date('2026-09-23T08:55:00.000Z'),
               },
@@ -221,47 +219,38 @@ describe('SignInFailureRateLimit', () => {
             key: 'Teresa@Example.com',
             attempts: [
               {
-                id: 10100221,
                 email: 'teresa@example.com',
                 attemptedAt: new Date('2026-09-24T08:46:00.000Z'),
               },
               {
-                id: 10100222,
                 email: 'teresa@example.com',
                 attemptedAt: new Date('2026-09-24T08:47:00.000Z'),
               },
               {
-                id: 10100223,
                 email: 'teresa@example.com',
                 attemptedAt: new Date('2026-09-24T08:48:00.000Z'),
               },
               {
-                id: 10100224,
                 email: 'teresa@example.com',
                 attemptedAt: new Date('2026-09-24T08:49:00.000Z'),
               },
               {
-                id: 10100225,
                 email: 'teresa@example.com',
                 attemptedAt: new Date('2026-09-24T08:50:00.000Z'),
               },
               {
-                id: 10100226,
                 email: 'teresa@example.com',
                 attemptedAt: new Date('2026-09-24T08:51:00.000Z'),
               },
               {
-                id: 10100227,
                 email: 'teresa@example.com',
                 attemptedAt: new Date('2026-09-24T08:52:00.000Z'),
               },
               {
-                id: 10100228,
                 email: 'teresa@example.com',
                 attemptedAt: new Date('2026-09-24T08:53:00.000Z'),
               },
               {
-                id: 10100229,
                 email: 'teresa@example.com',
                 attemptedAt: new Date('2026-09-24T08:54:00.000Z'),
               },
@@ -303,52 +292,42 @@ describe('SignInFailureRateLimit', () => {
             key: 'Valeria@Example.com',
             attempts: [
               {
-                id: 10100231,
                 email: 'ugo@example.com',
                 attemptedAt: new Date('2026-09-25T08:46:00.000Z'),
               },
               {
-                id: 10100232,
                 email: 'ugo@example.com',
                 attemptedAt: new Date('2026-09-25T08:47:00.000Z'),
               },
               {
-                id: 10100233,
                 email: 'ugo@example.com',
                 attemptedAt: new Date('2026-09-25T08:48:00.000Z'),
               },
               {
-                id: 10100234,
                 email: 'ugo@example.com',
                 attemptedAt: new Date('2026-09-25T08:49:00.000Z'),
               },
               {
-                id: 10100235,
                 email: 'ugo@example.com',
                 attemptedAt: new Date('2026-09-25T08:50:00.000Z'),
               },
               {
-                id: 10100236,
                 email: 'ugo@example.com',
                 attemptedAt: new Date('2026-09-25T08:51:00.000Z'),
               },
               {
-                id: 10100237,
                 email: 'ugo@example.com',
                 attemptedAt: new Date('2026-09-25T08:52:00.000Z'),
               },
               {
-                id: 10100238,
                 email: 'ugo@example.com',
                 attemptedAt: new Date('2026-09-25T08:53:00.000Z'),
               },
               {
-                id: 10100239,
                 email: 'ugo@example.com',
                 attemptedAt: new Date('2026-09-25T08:54:00.000Z'),
               },
               {
-                id: 10100240,
                 email: 'ugo@example.com',
                 attemptedAt: new Date('2026-09-25T08:55:00.000Z'),
               },
@@ -390,7 +369,6 @@ describe('SignInFailureRateLimit', () => {
             key: 'Zara@Example.com',
             refreshTokens: [
               {
-                id: 10100241,
                 StaffMemberId: 10100200,
                 tokenHash: 'sign-in-failure-limit-token-hash-0001',
                 sessionKey: 'sign-in-failure-limit-series-0001',
@@ -400,7 +378,6 @@ describe('SignInFailureRateLimit', () => {
                 expiredAt: new Date('2026-10-10T08:46:00.000Z'),
               },
               {
-                id: 10100242,
                 StaffMemberId: 10100200,
                 tokenHash: 'sign-in-failure-limit-token-hash-0002',
                 sessionKey: 'sign-in-failure-limit-series-0002',
@@ -410,7 +387,6 @@ describe('SignInFailureRateLimit', () => {
                 expiredAt: new Date('2026-10-10T08:47:00.000Z'),
               },
               {
-                id: 10100243,
                 StaffMemberId: 10100200,
                 tokenHash: 'sign-in-failure-limit-token-hash-0003',
                 sessionKey: 'sign-in-failure-limit-series-0003',
@@ -420,7 +396,6 @@ describe('SignInFailureRateLimit', () => {
                 expiredAt: new Date('2026-10-10T08:48:00.000Z'),
               },
               {
-                id: 10100244,
                 StaffMemberId: 10100200,
                 tokenHash: 'sign-in-failure-limit-token-hash-0004',
                 sessionKey: 'sign-in-failure-limit-series-0004',
@@ -430,7 +405,6 @@ describe('SignInFailureRateLimit', () => {
                 expiredAt: new Date('2026-10-10T08:49:00.000Z'),
               },
               {
-                id: 10100245,
                 StaffMemberId: 10100200,
                 tokenHash: 'sign-in-failure-limit-token-hash-0005',
                 sessionKey: 'sign-in-failure-limit-series-0005',
@@ -440,7 +414,6 @@ describe('SignInFailureRateLimit', () => {
                 expiredAt: new Date('2026-10-10T08:50:00.000Z'),
               },
               {
-                id: 10100246,
                 StaffMemberId: 10100200,
                 tokenHash: 'sign-in-failure-limit-token-hash-0006',
                 sessionKey: 'sign-in-failure-limit-series-0006',
@@ -450,7 +423,6 @@ describe('SignInFailureRateLimit', () => {
                 expiredAt: new Date('2026-10-10T08:51:00.000Z'),
               },
               {
-                id: 10100247,
                 StaffMemberId: 10100200,
                 tokenHash: 'sign-in-failure-limit-token-hash-0007',
                 sessionKey: 'sign-in-failure-limit-series-0007',
@@ -460,7 +432,6 @@ describe('SignInFailureRateLimit', () => {
                 expiredAt: new Date('2026-10-10T08:52:00.000Z'),
               },
               {
-                id: 10100248,
                 StaffMemberId: 10100200,
                 tokenHash: 'sign-in-failure-limit-token-hash-0008',
                 sessionKey: 'sign-in-failure-limit-series-0008',
@@ -470,7 +441,6 @@ describe('SignInFailureRateLimit', () => {
                 expiredAt: new Date('2026-10-10T08:53:00.000Z'),
               },
               {
-                id: 10100249,
                 StaffMemberId: 10100200,
                 tokenHash: 'sign-in-failure-limit-token-hash-0009',
                 sessionKey: 'sign-in-failure-limit-series-0009',
@@ -480,7 +450,6 @@ describe('SignInFailureRateLimit', () => {
                 expiredAt: new Date('2026-10-10T08:54:00.000Z'),
               },
               {
-                id: 10100250,
                 StaffMemberId: 10100200,
                 tokenHash: 'sign-in-failure-limit-token-hash-0010',
                 sessionKey: 'sign-in-failure-limit-series-0010',
