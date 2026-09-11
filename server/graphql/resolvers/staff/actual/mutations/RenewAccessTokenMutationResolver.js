@@ -25,6 +25,15 @@ import RefreshTokenExpressCookieClerk from '../../../../contexts/tools/RefreshTo
  * the access token has expired — so no authentication filter runs, `context.staffMember` is null
  * as a matter of course, and the cookie is the only credential there is.
  *
+ * **A renewal whose own cookie cannot be written is refused instead of half-issued.** The rotation
+ * mints a pair, and the refresh half of it reaches its holder as a cookie and nowhere else — so
+ * where the request has no response to write to, the cookie write is a silent no-op and a rotation
+ * would spend the presented token, mint a successor nobody can ever present, and answer with a
+ * working access token. The clerk is asked whether it can write at all *before* the rotation, and
+ * the renewal is refused when it cannot. It is asked there rather than first so that the three
+ * refusals above it — a dead or absent cookie, and a filled window — keep answering with the codes
+ * spec section 10's criteria pin them to on every transport.
+ *
  * **One refusal for four states.** A refresh-token cookie that is absent, or that matches no row,
  * or that is expired, revoked or already spent is refused as `RefreshTokenUnavailable` and
  * nothing else: section 10 requires the refusal to reveal which it was in none of them. The
@@ -77,7 +86,8 @@ export default class RenewAccessTokenMutationResolver extends BaseMutationResolv
       ...super.errorCodeHash,
 
       // Database errors
-      // One code for every dead credential state — absent, unknown, expired, revoked, spent.
+      // One code for every dead credential state — absent, unknown, expired, revoked, spent —
+      // and for a request the new refresh token could not have been handed back to.
       RefreshTokenUnavailable: '204.M003.001',
 
       // Policy refusals
@@ -138,11 +148,13 @@ export default class RenewAccessTokenMutationResolver extends BaseMutationResolv
    * fields, and the convention gives an operation with no input no argument at all. So there is
    * no input to validate, and no `203.*` code.
    *
-   * **The order of the three steps is the security-relevant part.** The lookup comes first
+   * **The order of the four steps is the security-relevant part.** The lookup comes first
    * because the rate limit is keyed on the series, and the series is only known once the
    * presented token has been found. The limit comes before the rotation because a rotation mints
    * a row and a refusal revokes a series, and both are writes an unbounded caller must not be
-   * able to ask for freely.
+   * able to ask for freely. The cookie is proved writable last of the three checks and still
+   * before the rotation, so that a pair is never minted with no way to hand its refresh half
+   * back, and so that the two refusals above keep their own codes.
    *
    * A token found here is deliberately **not** pre-checked for liveness. The guard inside
    * `SessionClerk#spendRefreshToken()` is evaluated by the database at the moment of the write,
@@ -181,6 +193,10 @@ export default class RenewAccessTokenMutationResolver extends BaseMutationResolv
 
     if (hasRenewedTooOften) {
       throw this.errorHash.TooFrequentRenewal.create()
+    }
+
+    if (!cookieClerk.canSaveRefreshTokenCookie()) {
+      throw this.errorHash.RefreshTokenUnavailable.create()
     }
 
     const rotatingResult = await sessionClerk.rotateSession({

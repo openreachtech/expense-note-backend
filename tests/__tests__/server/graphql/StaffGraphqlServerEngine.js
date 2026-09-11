@@ -1,4 +1,5 @@
 import express from 'express'
+import cors from 'cors'
 
 import {
   DateTimeScalar,
@@ -93,6 +94,174 @@ describe('StaffGraphqlServerEngine', () => {
 
       expect(actual)
         .toEqual(expected)
+    })
+  })
+})
+
+describe('StaffGraphqlServerEngine', () => {
+  describe('.get:corsClient', () => {
+    test('to be the cors library', () => {
+      const actual = StaffGraphqlServerEngine.corsClient
+
+      expect(actual)
+        .toBe(cors) // same reference
+    })
+  })
+})
+
+describe('StaffGraphqlServerEngine', () => {
+  describe('.get:corsAllowedOrigins', () => {
+    /*
+     * Asserted as an invariant rather than as a fixed list, because the list itself is whatever
+     * `STAFF_CORS_ALLOWED_ORIGINS` names in the environment the suite runs in, and it is meant to
+     * differ between a developer's machine and a deployment. What may never differ is that it is
+     * an **array**: `cors` reads a falsy `origin` — an empty string, a null, an absent value — as
+     * "allow any origin", and an empty array as "allow none". The mapping from the environment's
+     * own value is pinned by `.buildCorsAllowedOrigins()` below, the missing variable included.
+     */
+    describe('to be an allow-list, whatever the environment names', () => {
+      test('should be an array', () => {
+        const actual = StaffGraphqlServerEngine.corsAllowedOrigins
+
+        expect(actual)
+          .toBeInstanceOf(Array)
+      })
+    })
+
+    describe('to allow no origin by wildcard', () => {
+      test('should hold no asterisk', () => {
+        const expected = '*'
+
+        const actual = StaffGraphqlServerEngine.corsAllowedOrigins
+
+        expect(actual)
+          .not
+          .toContain(expected)
+      })
+    })
+  })
+})
+
+describe('StaffGraphqlServerEngine', () => {
+  describe('.buildCorsAllowedOrigins()', () => {
+    describe('to name every origin the setting carries', () => {
+      const cases = [
+        {
+          params: {
+            setting: 'http://localhost:3000',
+          },
+          expected: [
+            'http://localhost:3000',
+          ],
+        },
+        {
+          params: {
+            setting: 'http://localhost:3000,https://expense-note.example',
+          },
+          expected: [
+            'http://localhost:3000',
+            'https://expense-note.example',
+          ],
+        },
+        {
+          params: {
+            setting: ' http://localhost:3000 , https://expense-note.example ',
+          },
+          expected: [
+            'http://localhost:3000',
+            'https://expense-note.example',
+          ],
+        },
+        {
+          params: {
+            setting: 'http://localhost:3000,',
+          },
+          expected: [
+            'http://localhost:3000',
+          ],
+        },
+      ]
+
+      test.each(cases)('setting: $params.setting', ({
+        params,
+        expected,
+      }) => {
+        const actual = StaffGraphqlServerEngine.buildCorsAllowedOrigins(params)
+
+        expect(actual)
+          .toEqual(expected)
+      })
+    })
+
+    /*
+     * **A missing variable must not become a wildcard.** This is the case the boilerplate's
+     * `origin: '*'` is being replaced with, so it is the one worth pinning hardest: an absent or
+     * misspelled `STAFF_CORS_ALLOWED_ORIGINS` arrives here as null, and what comes back has to
+     * deny every cross-origin reader rather than admit all of them.
+     */
+    describe('to name no origin at all when the setting names none', () => {
+      /** @type {Array<*>} */
+      const cases = [
+        {
+          params: {
+            setting: null, // the value a missing or misspelled variable reads as
+          },
+        },
+        {
+          params: {
+            setting: '',
+          },
+        },
+        {
+          params: {
+            setting: '   ',
+          },
+        },
+        {
+          params: {
+            setting: ',',
+          },
+        },
+      ]
+
+      test.each(cases)('setting: $params.setting', ({
+        params,
+      }) => {
+        const actual = StaffGraphqlServerEngine.buildCorsAllowedOrigins(params)
+
+        expect(actual)
+          .toHaveLength(0)
+      })
+    })
+
+    /*
+     * And that empty answer has to be an empty **array**, not an empty string: `cors` treats a
+     * falsy `origin` as "allow any origin", so an empty string here would be the wildcard under
+     * another name and `toHaveLength(0)` above would pass for it.
+     */
+    describe('to answer an empty array rather than a falsy value when the setting names none', () => {
+      /** @type {Array<*>} */
+      const cases = [
+        {
+          params: {
+            setting: null,
+          },
+        },
+        {
+          params: {
+            setting: '',
+          },
+        },
+      ]
+
+      test.each(cases)('setting: $params.setting', ({
+        params,
+      }) => {
+        const actual = StaffGraphqlServerEngine.buildCorsAllowedOrigins(params)
+
+        expect(actual)
+          .toBeInstanceOf(Array)
+      })
     })
   })
 })
@@ -698,9 +867,16 @@ describe('StaffGraphqlServerEngine', () => {
     /*
      * Asserted position by position, by the name of the function each middleware factory hands
      * back, because `expect.objectContaining()` refuses a function outright (`typeof other !==
-     * 'object'`) and `expect.any(Function)` would pass for any five of them in any order.
+     * 'object'`) and `expect.any(Function)` would pass for any four of them in any order.
+     *
+     * **Four, where the boilerplate mounts five.** The upload middleware that used to sit at
+     * position 3 — and whose case here pinned it by the unnamed arrow it hands back — is gone:
+     * no operation of this audience takes a file, and mounted it parsed an unauthenticated
+     * multipart POST before any resolver or authentication filter ran. Its removal is what moves
+     * the urlencoded parser from position 4 to position 3, and the removal is the reason the
+     * count below is four.
      */
-    describe('to be the five middleware, in the order a request passes through them', () => {
+    describe('to be the four middleware, in the order a request passes through them', () => {
       const cases = [
         {
           factoryParams: {
@@ -752,20 +928,6 @@ describe('StaffGraphqlServerEngine', () => {
           params: {
             middlewareNamePath: '3.name',
           },
-          // The upload middleware hands back its handler as an unnamed arrow function.
-          expected: '',
-        },
-        {
-          factoryParams: {
-            config: /** @type {*} */ ({
-              staticPath: rootPath.to('public/'),
-            }),
-            share: /** @type {*} */ ({}),
-            errorHash: {},
-          },
-          params: {
-            middlewareNamePath: '4.name',
-          },
           expected: 'urlencodedParser',
         },
       ]
@@ -788,7 +950,12 @@ describe('StaffGraphqlServerEngine', () => {
 
 describe('StaffGraphqlServerEngine', () => {
   describe('#collectMiddleware()', () => {
-    describe('to hold those five middleware and no sixth', () => {
+    /*
+     * The count is asserted apart from the order so that a middleware appended past the last
+     * pinned position — an upload parser put back, for instance — fails here even though every
+     * position above it still holds what it held.
+     */
+    describe('to hold those four middleware and no fifth', () => {
       const cases = [
         {
           factoryParams: {
@@ -798,7 +965,7 @@ describe('StaffGraphqlServerEngine', () => {
             share: /** @type {*} */ ({}),
             errorHash: {},
           },
-          expected: 5,
+          expected: 4,
         },
         {
           factoryParams: {
@@ -808,7 +975,7 @@ describe('StaffGraphqlServerEngine', () => {
             share: /** @type {*} */ ({}),
             errorHash: {},
           },
-          expected: 5,
+          expected: 4,
         },
       ]
 
@@ -846,7 +1013,7 @@ describe('StaffGraphqlServerEngine', () => {
           },
           expected: {
             jsonArguments: {
-              limit: '10mb',
+              limit: '16kb',
             },
             urlencodedArguments: {
               extended: true,
@@ -863,7 +1030,7 @@ describe('StaffGraphqlServerEngine', () => {
           },
           expected: {
             jsonArguments: {
-              limit: '10mb',
+              limit: '16kb',
             },
             urlencodedArguments: {
               extended: true,
@@ -886,6 +1053,96 @@ describe('StaffGraphqlServerEngine', () => {
           .toHaveBeenCalledWith(expected.jsonArguments)
         expect(urlencodedSpy)
           .toHaveBeenCalledWith(expected.urlencodedArguments)
+      })
+    })
+  })
+})
+
+describe('StaffGraphqlServerEngine', () => {
+  describe('#collectMiddleware()', () => {
+    /*
+     * That the allow-list actually reaches `cors`, which is the whole of the fix: an engine that
+     * built the list correctly and then handed `cors` an `origin: '*'` anyway would satisfy every
+     * assertion made of `.get:corsAllowedOrigins` above. The library is reached through
+     * `.get:corsClient` for exactly this reason — it is a bare default-exported function, so
+     * there is no module member to spy on the way `express.json` is spied on below.
+     */
+    describe('to hand cors the allow-list it was given', () => {
+      const cases = [
+        {
+          factoryParams: {
+            config: /** @type {*} */ ({
+              staticPath: rootPath.to('public/'),
+            }),
+            share: /** @type {*} */ ({}),
+            errorHash: {},
+          },
+          mockAllowedOrigins: [
+            'http://localhost:3000',
+          ],
+          expected: {
+            corsArguments: {
+              origin: [
+                'http://localhost:3000',
+              ],
+            },
+          },
+        },
+        {
+          factoryParams: {
+            config: /** @type {*} */ ({
+              staticPath: rootPath.to('public/second-stand-in/'),
+            }),
+            share: /** @type {*} */ ({}),
+            errorHash: {},
+          },
+          mockAllowedOrigins: [
+            'https://expense-note.example',
+            'https://second.expense-note.example',
+          ],
+          expected: {
+            corsArguments: {
+              origin: [
+                'https://expense-note.example',
+                'https://second.expense-note.example',
+              ],
+            },
+          },
+        },
+        {
+          factoryParams: {
+            config: /** @type {*} */ ({
+              staticPath: rootPath.to('public/third-stand-in/'),
+            }),
+            share: /** @type {*} */ ({}),
+            errorHash: {},
+          },
+          // what an environment naming no origin yields, and it stays an empty list here
+          mockAllowedOrigins: [],
+          expected: {
+            corsArguments: {
+              origin: [],
+            },
+          },
+        },
+      ]
+
+      test.each(cases)('config.staticPath: $factoryParams.config.staticPath', ({
+        factoryParams,
+        mockAllowedOrigins,
+        expected,
+      }) => {
+        const engine = new StaffGraphqlServerEngine(factoryParams)
+        const corsSpy = jest.fn()
+        jest.spyOn(StaffGraphqlServerEngine, 'corsClient', 'get')
+          .mockReturnValue(corsSpy)
+        jest.spyOn(StaffGraphqlServerEngine, 'corsAllowedOrigins', 'get')
+          .mockReturnValue(mockAllowedOrigins)
+
+        engine.collectMiddleware()
+
+        expect(corsSpy)
+          .toHaveBeenCalledWith(expected.corsArguments)
       })
     })
   })

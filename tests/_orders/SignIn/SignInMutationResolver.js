@@ -34,6 +34,14 @@ import SignInMutationResolver from '../../../server/graphql/resolvers/staff/actu
  * describes sharing an address *and* an hour would count each other's failures. Where the
  * addresses are shared the dates are days apart.
  *
+ * **Every describe whose sign-in succeeds hands its context a response to write a cookie to.**
+ * Half of a session is the refresh token, and it reaches its holder as a cookie and nowhere else,
+ * so `signIn` refuses to mint a pair it cannot deliver — the cookie write is otherwise a silent
+ * no-op and the refresh row would be left unpresentable and unrevokable. Where a describe's
+ * sign-in is refused before the mint, the response stays null, which costs those describes
+ * nothing: what they are about happens earlier. The last describe is the one that asks what
+ * happens when there is no response at all.
+ *
  * The refusals are asserted against **anchored** patterns rather than the code as a substring:
  * section 10's first criterion requires the two credential refusals to reveal which of the two
  * they were in neither, and a message that appended the state would still satisfy a substring
@@ -112,7 +120,9 @@ describe('SignInMutationResolver', () => {
         const resolver = SignInMutationResolver.create()
         const context = /** @type {*} */ ({
           now: params.presentedAt,
-          expressResponse: null,
+          expressResponse: {
+            cookie: () => null,
+          },
           config: {
             graphqlEndpoint: '/graphql-staff',
             refreshTokenCookie: {
@@ -654,7 +664,9 @@ describe('SignInMutationResolver', () => {
         const resolver = SignInMutationResolver.create()
         const context = /** @type {*} */ ({
           now: params.presentedAt,
-          expressResponse: null,
+          expressResponse: {
+            cookie: () => null,
+          },
           config: {
             graphqlEndpoint: '/graphql-staff',
             refreshTokenCookie: {
@@ -856,7 +868,9 @@ describe('SignInMutationResolver', () => {
         const resolver = SignInMutationResolver.create()
         const context = /** @type {*} */ ({
           now: params.presentedAt,
-          expressResponse: null,
+          expressResponse: {
+            cookie: () => null,
+          },
           config: {
             graphqlEndpoint: '/graphql-staff',
             refreshTokenCookie: {
@@ -930,7 +944,9 @@ describe('SignInMutationResolver', () => {
           )
         const context = /** @type {*} */ ({
           now: params.presentedAt,
-          expressResponse: null,
+          expressResponse: {
+            cookie: () => null,
+          },
           config: {
             graphqlEndpoint: '/graphql-staff',
             refreshTokenCookie: {
@@ -1141,7 +1157,9 @@ describe('SignInMutationResolver', () => {
         await SignInAttempt.bulkCreate(params.recordedFailures)
         const context = /** @type {*} */ ({
           now: params.presentedAt,
-          expressResponse: null,
+          expressResponse: {
+            cookie: () => null,
+          },
           config: {
             graphqlEndpoint: '/graphql-staff',
             refreshTokenCookie: {
@@ -1163,6 +1181,91 @@ describe('SignInMutationResolver', () => {
 
         expect(actual)
           .toEqual(expected)
+      })
+    })
+  })
+})
+
+describe('SignInMutationResolver', () => {
+  describe('#resolve()', () => {
+    /*
+     * **A session that cannot be delivered whole is refused rather than half-issued.**
+     *
+     * The engine's endpoint also carries a WebSocket channel — `GraphqlServerBuilder#setupServer()`
+     * opens one for every audience, with no configuration flag, and that channel is the
+     * framework's — and over it there is no express response. So
+     * `BaseAppGraphqlContext#get:expressResponse` is null, and
+     * `RefreshTokenExpressCookieClerk#saveRefreshTokenCookie()` writes through an optional call
+     * that silently does nothing. A sign-in that minted first would verify the credential, commit
+     * a token pair, throw the refresh half away and answer with a working access token — leaving a
+     * refresh row nobody can present and `signOut` cannot revoke until it expires.
+     *
+     * The credentials here are **correct**: every rule passes, the window is empty, the password
+     * verifies, and the refusal is the missing response and nothing else. Which is also what makes
+     * this fail without the guard — the resolver would answer with a token pair.
+     *
+     * The pair is asserted not to have been committed, rather than looked for afterwards: the save
+     * is what commits it, so a save that was never called is a pair that was never written. The
+     * spy is not given a stub implementation, because a spy that is never called needs none.
+     */
+    describe('should refuse a sign-in it has no way to hand a refresh cookie to', () => {
+      const cases = [
+        {
+          params: {
+            input: {
+              email: 'rin.takahashi@expense-note.example',
+              password: 'rin-friday-7052',
+            },
+            presentedAt: new Date('2026-10-14T09:00:00.000Z'),
+          },
+          expected: /^204\.M001\.003$/u,
+        },
+        {
+          params: {
+            input: {
+              email: 'riku.hasegawa@expense-note.example',
+              password: 'riku-january-2589',
+            },
+            presentedAt: new Date('2026-10-14T10:00:00.000Z'),
+          },
+          expected: /^204\.M001\.003$/u,
+        },
+      ]
+
+      test.each(cases)('input.email: $params.input.email', async ({
+        params,
+        expected,
+      }) => {
+        const resolver = SignInMutationResolver.create()
+        const saveSessionSpy = jest.spyOn(SessionClerk.prototype, 'saveSession')
+        const context = /** @type {*} */ ({
+          now: params.presentedAt,
+          expressResponse: null, // what a request over the WebSocket channel carries
+          config: {
+            graphqlEndpoint: '/graphql-staff',
+            refreshTokenCookie: {
+              name: 'staff_refresh_token',
+              lifetimeDays: 14,
+              secure: true,
+              sameSite: 'lax',
+              httpOnly: true,
+            },
+          },
+        })
+
+        const actual = () => resolver.resolve({
+          variables: {
+            input: params.input,
+          },
+          context,
+        })
+
+        await expect(actual)
+          .rejects
+          .toThrow(expected)
+        expect(saveSessionSpy)
+          .not
+          .toHaveBeenCalled()
       })
     })
   })

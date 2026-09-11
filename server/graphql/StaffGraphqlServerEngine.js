@@ -3,10 +3,10 @@ import cors from 'cors'
 
 import {
   DateTimeScalar,
-  graphqlUploadExpressWithResolvingContentType,
 } from '@openreachtech/renchan'
 
 import {
+  env,
   rootPath,
 } from '../../app/globals/_.js'
 
@@ -20,6 +20,33 @@ import StaffGraphqlContext from './contexts/StaffGraphqlContext.js'
 const {
   REFRESH_TOKEN_COOKIE,
 } = AUTH_CONSTANT_HASH
+
+/*
+ * What separates one origin from the next in `STAFF_CORS_ALLOWED_ORIGINS`.
+ *
+ * An origin holds no comma — it is a scheme, a host and an optional port — so a comma is
+ * unambiguous, and one environment variable can carry the whole list.
+ */
+const CORS_ALLOWED_ORIGIN_SEPARATOR = ','
+
+/*
+ * The largest JSON body this endpoint parses.
+ *
+ * **Sized to what the audience actually accepts.** Every operation spec sections 10.1, 11.1 and
+ * 12.1 declare is a GraphQL call whose variables are a handful of short scalars — `signIn`'s two
+ * are an address of at most 191 characters and a password of at most 72 bytes — so the body is the
+ * query document plus a few hundred bytes of variables. Sixteen kilobytes leaves room for a
+ * document far longer than any this audience declares, including the introspection query a
+ * schema-aware client sends, while refusing a body that could only be something else.
+ *
+ * It replaces the boilerplate's `10mb`, which sized the parser for a file upload this audience
+ * never accepts (section 4 puts a receipt photograph out of scope for 1.0.0). An unauthenticated
+ * caller could otherwise hand the parser ten megabytes to buffer and parse before any resolver or
+ * authentication filter ran.
+ *
+ * Raise it when an operation is added that genuinely carries more, and say which one here.
+ */
+const MAX_JSON_BODY_SIZE = '16kb'
 
 /**
  * Renchan server engine for staff.
@@ -88,25 +115,100 @@ export default class StaffGraphqlServerEngine extends BaseAppGraphqlServerEngine
     }
   }
 
-  /** @override */
+  /**
+   * get: CORS library — a seam so tests can substitute it.
+   *
+   * @returns {typeof cors} The `cors` library.
+   */
+  static get corsClient () {
+    return cors
+  }
+
+  /**
+   * get: The origins a browser may read a response from this endpoint for.
+   *
+   * **Why this endpoint has an allow-list at all.** `signIn` is reachable without a session
+   * (spec section 7's Authentication row), takes attacker-chosen credentials and answers with a
+   * body worth reading. Under the boilerplate's `origin: '*'` any page on the internet could make
+   * a visitor's browser post to it and read the answer, which is credential stuffing relayed
+   * through the staff's own browsers. The cookie-authenticated operations are out of that reach
+   * for a second reason — the refresh cookie is `SameSite=Lax` and this endpoint sets no
+   * `Access-Control-Allow-Credentials` — but that left the whole of the protection resting on one
+   * cookie attribute, with no origin control of any kind behind it.
+   *
+   * **A missing or misspelled variable yields an empty list, never a wildcard**, which is the same
+   * shape `BaseAppGraphqlServerEngine.usesSecureRefreshTokenCookie` is written in: the unsafe
+   * value has to be asked for explicitly. An empty list denies every cross-origin reader — `cors`
+   * reflects an origin only when the list holds it, and an empty **array** is not the falsy value
+   * it reads as "allow any" (an empty string or a null would be, which is why the list is always
+   * built as an array).
+   *
+   * Same-origin callers are unaffected either way: a browser asks for none of these headers when
+   * the page and the endpoint share an origin.
+   *
+   * @returns {Array<string>} Allowed origins. Empty: no cross-origin caller may read a response.
+   */
+  static get corsAllowedOrigins () {
+    return this.buildCorsAllowedOrigins({
+      setting: env.STAFF_CORS_ALLOWED_ORIGINS,
+    })
+  }
+
+  /**
+   * Build the allow-list out of the comma-separated setting the environment carries.
+   *
+   * Blank entries are dropped rather than kept, because an empty string matches no origin `cors`
+   * would ever be handed and a trailing comma is the easiest thing to leave in a list by hand.
+   *
+   * @param {{
+   *   setting: string | null
+   * }} params - Parameters.
+   * @returns {Array<string>} Allowed origins, in the order the setting names them.
+   */
+  static buildCorsAllowedOrigins ({
+    setting,
+  }) {
+    const declaredOrigins = setting
+      ?? ''
+
+    return declaredOrigins
+      .split(CORS_ALLOWED_ORIGIN_SEPARATOR)
+      .map(origin => origin.trim())
+      .filter(origin => origin !== '')
+  }
+
+  /**
+   * Collect the middleware a request passes through, in order.
+   *
+   * **Two of the boilerplate's five are deliberately not here.**
+   *
+   * `graphqlUploadExpressWithResolvingContentType()` is absent because no operation of this
+   * audience takes a file: spec sections 10.1, 11.1 and 12.1 are its complete operation list,
+   * neither schema file declares the `Upload` scalar, and section 4 puts a receipt photograph out
+   * of scope for 1.0.0 with no object storage declared. Mounted, it parsed a deliberate
+   * unauthenticated multipart POST — ten files of ten megabytes by its own configuration — before
+   * any resolver or authentication filter ran. This closes recorded question Q27, which had
+   * already noticed that the `rawBody` capture beside it was dropped for exactly this reason while
+   * the upload parser was kept: the omission was reasoned and the retention was inherited.
+   *
+   * A `verify` callback stashing a `rawBody` is the second, and the reasons are below.
+   *
+   * @override
+   * @returns {Array<import('express').RequestHandler>} Middleware, in the order a request meets them.
+   */
   collectMiddleware () {
     return [
-      cors({
-        origin: '*',
+      this.Ctor.corsClient({
+        origin: this.Ctor.corsAllowedOrigins,
       }),
 
       express.json({
-        limit: '10mb',
+        limit: MAX_JSON_BODY_SIZE,
       }),
 
       express.static(
         this.config.staticPath
       ),
-
-      graphqlUploadExpressWithResolvingContentType({
-        maxFileSize: 10000000, // 10 MB
-        maxFiles: 10,
-      }),
 
       /*
        * No `verify` callback stashing a `rawBody`, where the two older engines carry one.

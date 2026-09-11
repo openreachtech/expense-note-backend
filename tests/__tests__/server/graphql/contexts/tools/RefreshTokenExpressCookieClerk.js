@@ -468,6 +468,94 @@ describe('RefreshTokenExpressCookieClerk', () => {
 })
 
 describe('RefreshTokenExpressCookieClerk', () => {
+  describe('#canSaveRefreshTokenCookie()', () => {
+    /*
+     * What a session resolver asks before it commits a token pair, because the write below is an
+     * optional call and does nothing at all where there is no response — which would leave a
+     * refresh token minted, discarded and unrevokable while the caller was handed a working
+     * access token.
+     */
+    describe('should be truthy', () => {
+      // Titled by a label rather than by a field path: the input is a response stub made of
+      // functions, which no path renders readably.
+      const cases = [
+        {
+          label: 'a response carrying the one method the clerk calls',
+          params: {
+            expressResponse: {
+              cookie: () => null,
+            },
+          },
+        },
+        {
+          label: 'a response carrying more than the clerk calls',
+          params: {
+            expressResponse: {
+              cookie: () => null,
+              clearCookie: () => null,
+              setHeader: () => null,
+            },
+          },
+        },
+      ]
+
+      test.each(cases)('label: $label', ({
+        params,
+      }) => {
+        const clerk = RefreshTokenExpressCookieClerk.create({
+          context: /** @type {*} */ ({
+            expressResponse: params.expressResponse,
+          }),
+        })
+
+        const actual = clerk.canSaveRefreshTokenCookie()
+
+        expect(actual)
+          .toBeTruthy()
+      })
+    })
+
+    /*
+     * Null is what `BaseAppGraphqlContext#get:expressResponse` answers where there is no express
+     * response — over the WebSocket channel the engine's endpoint also carries, which
+     * `GraphqlServerBuilder#setupServer()` opens for every audience. The absent key is the same
+     * question asked of a context built some other way, and both have to answer falsy: the write
+     * is refused by every nullish value, so the capability has to be too.
+     */
+    describe('should be falsy', () => {
+      /** @type {Array<*>} */
+      const cases = [
+        {
+          params: {
+            expressResponse: null,
+          },
+        },
+        {
+          params: {
+            // expressResponse: undefined — no response on the context at all
+          },
+        },
+      ]
+
+      test.each(cases)('expressResponse: $params.expressResponse', ({
+        params,
+      }) => {
+        const clerk = RefreshTokenExpressCookieClerk.create({
+          context: /** @type {*} */ ({
+            expressResponse: params.expressResponse,
+          }),
+        })
+
+        const actual = clerk.canSaveRefreshTokenCookie()
+
+        expect(actual)
+          .toBeFalsy()
+      })
+    })
+  })
+})
+
+describe('RefreshTokenExpressCookieClerk', () => {
   describe('#saveRefreshTokenCookie()', () => {
     describe('to write the token as an HttpOnly cookie', () => {
       const cases = [

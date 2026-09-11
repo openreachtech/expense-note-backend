@@ -65,7 +65,13 @@ describe('SignInInputValidator', () => {
     // address reported as a malformed one would send somebody looking at the wrong thing. Each
     // error class stands in as a marker string: this method only pairs a rule with its error, and
     // a marker makes the pairing readable.
-    describe('should declare the four rules in order', () => {
+    //
+    // The malformed-address marker appears twice, and deliberately: the shape rule and the
+    // 191-character rule both refuse under `MalformedEmail`, because a validator may only name an
+    // error the resolver's `errorCodeHash` declares and declaring a fifth one is not that unit's
+    // to do. Both are the same refusal to a caller — an input refused before anything was looked
+    // up — and the rules themselves stay separate, which is what the two entries show.
+    describe('should declare the five rules in order', () => {
       const cases = [
         {
           factoryParams: {
@@ -83,6 +89,7 @@ describe('SignInInputValidator', () => {
           expected: [
             [expect.any(Function), 'error-ctor-missing-email'],
             [expect.any(Function), 'error-ctor-missing-password'],
+            [expect.any(Function), 'error-ctor-malformed-email'],
             [expect.any(Function), 'error-ctor-malformed-email'],
             [expect.any(Function), 'error-ctor-too-long-password'],
           ],
@@ -103,6 +110,7 @@ describe('SignInInputValidator', () => {
           expected: [
             [expect.any(Function), 'error-ctor-missing-email'],
             [expect.any(Function), 'error-ctor-missing-password'],
+            [expect.any(Function), 'error-ctor-malformed-email'],
             [expect.any(Function), 'error-ctor-malformed-email'],
             [expect.any(Function), 'error-ctor-too-long-password'],
           ],
@@ -548,6 +556,139 @@ describe('SignInInputValidator', () => {
 })
 
 describe('SignInInputValidator', () => {
+  describe('#isValidEmailCharacterCount()', () => {
+    // 191 is the width of `staff_member_secrets.email` (spec section 9.4) and of
+    // `sign_in_attempts.email` (section 10.3), so the boundary is asserted on both sides of it:
+    // an address of exactly 191 characters has somewhere to go and must not be refused.
+    //
+    // The last two cases are the ones that say *characters*, not bytes. Each is well over 191
+    // bytes and well under 191 characters, which is exactly what `varchar(191)` accepts — a cap
+    // measured in bytes, as the password rule below measures, would refuse an address the column
+    // would have held.
+    describe('should be truthy', () => {
+      const cases = [
+        {
+          factoryParams: {
+            input: {
+              email: 'haruka.arai@expense-note.example', // 32 characters
+            },
+          },
+        },
+        {
+          factoryParams: {
+            input: {
+              email: 'long-address-0191-aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa@expense-note.example', // 191 characters, the boundary the column still holds
+            },
+          },
+        },
+        {
+          factoryParams: {
+            input: {
+              email: 'アドレスアドレスアドレスアドレスアドレスアドレスアドレスアドレスアドレスアドレスアドレスアドレスアドレスアドレスアドレスアドレスアドレスアドレスアドレスアドレスアドレスアドレスアドレスアドレス0001@expense-note.example', // 121 characters, 313 bytes
+            },
+          },
+        },
+        {
+          factoryParams: {
+            input: {
+              email: 'long-address-astral-bbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbb😀@expense-note.example', // 191 characters, and 192 UTF-16 code units: what `String#length` would have refused
+            },
+          },
+        },
+      ]
+
+      test.each(cases)('input.email: $factoryParams.input.email', ({
+        factoryParams,
+      }) => {
+        const args = {
+          input: factoryParams.input,
+          errorHash: {}, // neutral value; a rule answers without reaching for an error
+        }
+        const validator = SignInInputValidator.create(args)
+
+        const actual = validator.isValidEmailCharacterCount()
+
+        expect(actual)
+          .toBeTruthy()
+      })
+    })
+
+    // The 300-character case is the one the audit met: well formed, so every other rule passed it,
+    // and then `sign_in_attempts.email` had nowhere to put it.
+    describe('should be falsy', () => {
+      const cases = [
+        {
+          factoryParams: {
+            input: {
+              email: 'long-address-0192-aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa@expense-note.example', // 192 characters, one past the column
+            },
+          },
+        },
+        {
+          factoryParams: {
+            input: {
+              email: 'long-address-0300-aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa@expense-note.example', // 300 characters
+            },
+          },
+        },
+      ]
+
+      test.each(cases)('input.email: $factoryParams.input.email', ({
+        factoryParams,
+      }) => {
+        const args = {
+          input: factoryParams.input,
+          errorHash: {}, // neutral value; a rule answers without reaching for an error
+        }
+        const validator = SignInInputValidator.create(args)
+
+        const actual = validator.isValidEmailCharacterCount()
+
+        expect(actual)
+          .toBeFalsy()
+      })
+    })
+
+    // A value that is not a string belongs to the presence rule, which is declared ahead of this
+    // one, so this rule answers that it has nothing to refuse.
+    describe('when the address is not a string', () => {
+      /** @type {Array<*>} */
+      const cases = [
+        {
+          factoryParams: {
+            input: {
+              email: null,
+            },
+          },
+        },
+        {
+          factoryParams: {
+            input: {
+              email: 12345,
+            },
+          },
+        },
+      ]
+
+      test.each(cases)('input.email: $factoryParams.input.email', ({
+        factoryParams,
+      }) => {
+        const args = {
+          input: factoryParams.input,
+          errorHash: {}, // neutral value; a rule answers without reaching for an error
+        }
+        const validator = SignInInputValidator.create(args)
+
+        const actual = validator.isValidEmailCharacterCount()
+
+        expect(actual)
+          .toBeTruthy()
+      })
+    })
+  })
+})
+
+describe('SignInInputValidator', () => {
   describe('#isValidPasswordByteSize()', () => {
     describe('should be truthy', () => {
       const cases = [
@@ -722,6 +863,20 @@ describe('SignInInputValidator', () => {
         {
           factoryParams: {
             input: {
+              email: 'long-address-0191-aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa@expense-note.example', // 191 characters, which the column holds
+              password: 'password-0018',
+            },
+            errorHash: {
+              MissingEmail: { create: () => 'created-error-missing-email' },
+              MissingPassword: { create: () => 'created-error-missing-password' },
+              MalformedEmail: { create: () => 'created-error-malformed-email' },
+              TooLongPassword: { create: () => 'created-error-too-long-password' },
+            },
+          },
+        },
+        {
+          factoryParams: {
+            input: {
               email: 'yuuto.kirishima+notes@expense-note.example',
               password: 'password-0007-aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa', // 72 bytes
             },
@@ -803,6 +958,38 @@ describe('SignInInputValidator', () => {
             input: {
               email: 'nobody@',
               password: 'password-0015',
+            },
+            errorHash: {
+              MissingEmail: { create: () => 'created-error-missing-email' },
+              MissingPassword: { create: () => 'created-error-missing-password' },
+              MalformedEmail: { create: () => 'created-error-malformed-email' },
+              TooLongPassword: { create: () => 'created-error-too-long-password' },
+            },
+          },
+          expected: 'created-error-malformed-email',
+        },
+        {
+          label: 'the address is 192 characters, one past the column that has to hold it',
+          factoryParams: {
+            input: {
+              email: 'long-address-0192-aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa@expense-note.example',
+              password: 'password-0016',
+            },
+            errorHash: {
+              MissingEmail: { create: () => 'created-error-missing-email' },
+              MissingPassword: { create: () => 'created-error-missing-password' },
+              MalformedEmail: { create: () => 'created-error-malformed-email' },
+              TooLongPassword: { create: () => 'created-error-too-long-password' },
+            },
+          },
+          expected: 'created-error-malformed-email',
+        },
+        {
+          label: 'the address is 300 characters, which is what reached the database before this rule',
+          factoryParams: {
+            input: {
+              email: 'long-address-0300-aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa@expense-note.example',
+              password: 'password-0017',
             },
             errorHash: {
               MissingEmail: { create: () => 'created-error-missing-email' },

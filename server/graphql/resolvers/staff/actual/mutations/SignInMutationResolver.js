@@ -31,11 +31,26 @@ import RefreshTokenExpressCookieClerk from '../../../../contexts/tools/RefreshTo
  * the same thing.
  *
  * **What it cost to do that, stated rather than hidden.** Every attempt on an address with no
- * account now spends that compare. Section 7 sizes this product as an ordinary internal business
- * system for at most fifty members of staff, and section 7's own limit caps one address at ten
- * failures per fifteen minutes, so the work an unknown address can buy is bounded at ten compares
- * a quarter of an hour — under a second of processor time. The alternative was leaving a
- * measurable difference in place behind nothing but TLS, and checkpoint 8's audit would meet it.
+ * account now spends that compare, and **section 7's limit does not bound what that costs in
+ * total.** What it bounds is one address: ten failures per fifteen minutes, so no single address
+ * can buy more than ten compares in a quarter of an hour. Section 7 requires the limit to be keyed
+ * on the address rather than on the caller's IP, and gives its reason — the staff sit behind one
+ * office address, and an IP-keyed limit would let one person's wrong password lock out everybody.
+ * The consequence is that **a caller rotating the address is limited by nothing here**: every
+ * distinct well-formed address buys a fresh ten, each one costing a bcrypt compare and a row in
+ * `sign_in_attempts`, a table section 10.3 says nothing expires. So neither the processor time nor
+ * the row growth this path can be made to spend is bounded by anything in this feature.
+ *
+ * **Where that bound belongs is the reverse proxy**, as a limit on requests per caller — which
+ * section 7 already implies is in front of these servers, since it puts TLS there and
+ * `server/index.js` binds to loopback alone. A request-rate bound is its job and not a resolver's:
+ * the resolver cannot see a caller, only an address, and by the time it is asked the work has
+ * already been requested. Nothing in this repository configures it, and an unbounded caller is
+ * what a deployment without it leaves open.
+ *
+ * The cost was still worth paying. The alternative was leaving a measurable difference in place
+ * behind nothing but TLS — an address list enumerable with a clock — while spending the same
+ * compare on every attempt that finds an account anyway.
  *
  * **Nothing can present the password this is the digest of.** It was produced from a randomly
  * generated string with `bcryptjs` at the same cost factor `PasswordEncipher` uses, and that
@@ -165,6 +180,13 @@ export default class SignInMutationResolver extends BaseMutationResolver {
    * `TooFrequentSignIn` refuses a policy rather than a credential, and `FailedToStartSession` is
    * reachable only *after* a credential has verified, so neither tells a caller anything about
    * whose accounts exist.
+   *
+   * **`FailedToStartSession` answers two causes**, both of them "no session was started and none
+   * will be": the session save reported a failure, or the refresh cookie cannot be written to
+   * this request at all, which `resolve()`'s sixth step explains. A caller can do nothing
+   * different about either, and neither reveals anything, so the shared code costs nothing that
+   * matters. Telling them apart is a diagnostic convenience, and buying it means declaring a code
+   * here — which is why they share one for now rather than one of them going unrefused.
    *
    * `TooFrequentSignIn` sits in `204` because the convention's three families — input, database,
    * external — have none for a policy refusal, and `204` is the nearest fit; inventing a fourth
@@ -343,7 +365,18 @@ export default class SignInMutationResolver extends BaseMutationResolver {
    * 5. *A failure records one row, and only a failure.* A successful sign-in writes nothing to
    * `sign_in_attempts` (section 7: "A successful sign-in counts for nothing"), which is what
    * makes ten successful sign-ins inside one window cost nothing.
-   * 6. *The session is issued, the cookie written, the access token returned.*
+   * 6. *The cookie is proved deliverable before a pair is minted.* Half of a session — the
+   * refresh token — reaches its holder as a cookie and nowhere else, and the cookie write is a
+   * silent no-op where the request has no response to write to. Minting first and discovering
+   * that afterwards would leave a refresh row nobody can present and `signOut` cannot revoke,
+   * live for `AUTH_REFRESH_TOKEN_TTL_DAYS`, while the caller was handed a working access token.
+   * So the question is asked of the cookie clerk *before* the save, and a session that cannot be
+   * delivered whole is refused rather than half-issued. The check sits here rather than at the
+   * top of the method deliberately: every refusal above it is one a spec criterion pins to a
+   * code — a malformed input, a filled window, a credential that did not verify — and moving
+   * this check ahead of them would answer those cases with this refusal instead, on any transport
+   * that has no response. It guards the mint, so it stands next to the mint.
+   * 7. *The session is issued, the cookie written, the access token returned.*
    *
    * @override
    * @param {GraphqlType.ResolverInput<{
@@ -404,6 +437,14 @@ export default class SignInMutationResolver extends BaseMutationResolver {
     // the step above has just proved to be there.
     const staffMemberId = passwordHashEntity.StaffMemberId
 
+    const cookieClerk = this.createRefreshTokenCookieClerk({
+      context,
+    })
+
+    if (!cookieClerk.canSaveRefreshTokenCookie()) {
+      throw this.errorHash.FailedToStartSession.create()
+    }
+
     const savingResult = await this.saveSession({
       staffMemberId,
       now: context.now,
@@ -416,10 +457,6 @@ export default class SignInMutationResolver extends BaseMutationResolver {
     const {
       credentialPair,
     } = savingResult
-
-    const cookieClerk = this.createRefreshTokenCookieClerk({
-      context,
-    })
 
     cookieClerk.saveRefreshTokenCookie({
       refreshToken: credentialPair.refreshToken,

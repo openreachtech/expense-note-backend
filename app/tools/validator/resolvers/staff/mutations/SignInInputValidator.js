@@ -19,6 +19,31 @@ import BaseInputValidator from '../../../BaseInputValidator.js'
 const EMAIL_PATTERN = /^[^\s@]+@[^\s@.]+(?:\.[^\s@.]+)+$/u
 
 /*
+ * The longest address either table that stores one can hold.
+ *
+ * **191 is not a policy, it is the column.** `staff_member_secrets.email` is `varchar(191)`
+ * (spec section 9.4) and `sign_in_attempts.email` is `varchar(191)` (section 10.3), so an address
+ * longer than this has nowhere to go. Left unrefused it passed every rule below, was counted by
+ * section 7's limit, spent the equalizing bcrypt compare, and was then written as a failed
+ * attempt — where MariaDB in strict mode raises `Data too long`, which nothing on that path
+ * catches, so the caller received the framework's `104.X000.001` instead of a refusal this
+ * operation names. Under a permissive `sql_mode` it truncated instead, and two long addresses
+ * differing only past their 191st character then shared one counted key.
+ *
+ * **A character count, not a byte count — and this is the opposite of the password rule below.**
+ * `varchar(191)` in MySQL and MariaDB bounds *characters*, not bytes; the 191 itself comes from
+ * `utf8mb4`'s four bytes a character against the 767-byte index prefix limit, and the server
+ * applies it as a character count. So a 191-character address of multi-byte characters fits and
+ * must not be refused. The password cap below counts bytes for an unrelated reason — bcrypt reads
+ * 72 bytes of its input and no more — and the two must not be confused.
+ *
+ * Counted in code points rather than with `String#length`, because `String#length` counts UTF-16
+ * code units: a character outside the basic multilingual plane counts twice there and once in the
+ * database, so a length-based cap would refuse an address the column would have accepted.
+ */
+const MAX_EMAIL_CHARACTER_COUNT = 191
+
+/*
  * The longest password bcrypt actually reads (Q32).
  *
  * bcrypt truncates its input at 72 bytes and says nothing about it, so a longer password has its
@@ -38,24 +63,35 @@ const MAX_PASSWORD_BYTE_SIZE = 72
  *
  * The schema types both fields `String!`, so GraphQL has already refused a missing field and a
  * field of the wrong type before a resolver runs. What is left is what `String!` permits and the
- * operation should not, and it is **four distinct malformed values, so four rules**:
+ * operation should not, and it is **five distinct malformed values, so five rules**:
  *
  * 1. an empty address — `String!` permits `""`
  * 2. an address that is not shaped like one — refused as malformed rather than counted as a failed
  * attempt against an account that was never going to exist
- * 3. an empty password — as above
- * 4. a password past bcrypt's 72 bytes, whose tail would be read by nobody
+ * 3. an address longer than the 191 characters either table that stores one can hold
+ * 4. an empty password — as above
+ * 5. a password past bcrypt's 72 bytes, whose tail would be read by nobody
  *
  * **Refusing malformed input with its own code reveals nothing about whose accounts exist.** Spec
  * section 10's requirement that refusals read identically is about `signIn`'s *lookup outcome* —
  * an address with no account against a correct address with the wrong password — and a caller
- * learning that their own request was malformed says nothing about either. So these four are not
+ * learning that their own request was malformed says nothing about either. So these five are not
  * merged, and the sameness that section 10 requires is the resolver's to keep among the codes it
  * answers *after* the input is trusted.
  *
- * The two presence rules are declared ahead of the two shape rules, because only the first failing
- * rule surfaces: an empty address reported as a malformed one would send somebody looking at what
- * they typed rather than at what they left out.
+ * The two presence rules are declared ahead of the three shape rules, because only the first
+ * failing rule surfaces: an empty address reported as a malformed one would send somebody looking
+ * at what they typed rather than at what they left out.
+ *
+ * **Rules 2 and 3 refuse under one error, `MalformedEmail`, and that is a decision worth stating.**
+ * Every other rule here carries a name of its own, and an over-long address would read better as a
+ * `TooLongEmail` — but a validator may only refuse with a name the resolver's `errorCodeHash`
+ * declares, since the base reads the error class off `this.errorHash` and a name that is not there
+ * raises a `TypeError` instead of refusing. Adding that declaration is not this unit's to make.
+ * Sharing the existing code costs a caller nothing — both are `203.M001.003`, an input refused
+ * before anything was looked up — and `MalformedEmail` is true of an address that no table of this
+ * product can hold. To split them later, declare `TooLongEmail: '203.M001.005'` in
+ * `SignInMutationResolver.errorCodeHash` and point rule 3's entry at it; nothing else changes.
  *
  * @augments {BaseInputValidator<ErrorHash, SignInInput>}
  */
@@ -78,6 +114,10 @@ export default class SignInInputValidator extends BaseInputValidator {
       ],
       [
         () => this.isValidEmailFormat(),
+        this.errorHash.MalformedEmail,
+      ],
+      [
+        () => this.isValidEmailCharacterCount(),
         this.errorHash.MalformedEmail,
       ],
       [
@@ -144,6 +184,30 @@ export default class SignInInputValidator extends BaseInputValidator {
     }
 
     return EMAIL_PATTERN.test(email)
+  }
+
+  /**
+   * Whether the presented address is short enough for the tables that store one to hold it.
+   *
+   * Measured in code points, which is what `varchar(191)` counts — see
+   * `MAX_EMAIL_CHARACTER_COUNT` for why that is characters here and bytes for the password. A
+   * value that is not a string satisfies this rule for the reason the format rule above does: the
+   * presence rule owns it and is declared first.
+   *
+   * @returns {boolean} true: the address fits in the column that has to hold it.
+   */
+  isValidEmailCharacterCount () {
+    const {
+      email,
+    } = this.input
+
+    if (typeof email !== 'string') {
+      return true
+    }
+
+    const emailCharacterCount = Array.from(email).length
+
+    return emailCharacterCount <= MAX_EMAIL_CHARACTER_COUNT
   }
 
   /**

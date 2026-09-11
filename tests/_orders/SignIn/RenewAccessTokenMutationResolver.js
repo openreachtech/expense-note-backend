@@ -25,6 +25,15 @@ import RenewAccessTokenMutationResolver from '../../../server/graphql/resolvers/
  * generator would not have minted; the four digits at the end are what tells them apart in a
  * failure log. The series keys are this file's own so that no other file's series is touched.
  *
+ * **Every describe whose renewal rotates hands its context a response to write a cookie to.** The
+ * rotation mints a pair whose refresh half reaches its holder as a cookie and nowhere else, so the
+ * operation refuses to rotate where it has nothing to write that cookie to — the write is
+ * otherwise a silent no-op and the successor would be minted unpresentable. The describes whose
+ * renewal is refused before the rotation keep a null response, because what they are about
+ * happens earlier; the last describe is the one that asks what happens when there is no response
+ * at all. The reuse-revocation describe needs a response for the same reason a successful renewal
+ * does: revoking the series is the rotation's own doing.
+ *
  * The refusals are asserted against an **anchored** pattern rather than the code as a substring:
  * spec section 10 requires the refusal of an absent, expired, revoked or already spent cookie to
  * reveal which it was in none of them, and a message that appended the state would still satisfy
@@ -81,7 +90,9 @@ describe('RenewAccessTokenMutationResolver', () => {
         const context = /** @type {*} */ ({
           now: params.presentedAt,
           cookieHeader: params.cookieHeader,
-          expressResponse: null,
+          expressResponse: {
+            cookie: () => null,
+          },
           config: {
             graphqlEndpoint: '/graphql-staff',
             refreshTokenCookie: {
@@ -509,7 +520,9 @@ describe('RenewAccessTokenMutationResolver', () => {
         const context = /** @type {*} */ ({
           now: params.presentedAt,
           cookieHeader: params.cookieHeader,
-          expressResponse: null,
+          expressResponse: {
+            cookie: () => null,
+          },
           config: {
             graphqlEndpoint: '/graphql-staff',
             refreshTokenCookie: {
@@ -709,7 +722,9 @@ describe('RenewAccessTokenMutationResolver', () => {
         const context = /** @type {*} */ ({
           now: params.presentedAt,
           cookieHeader: params.cookieHeader,
-          expressResponse: null,
+          expressResponse: {
+            cookie: () => null,
+          },
           config: {
             graphqlEndpoint: '/graphql-staff',
             refreshTokenCookie: {
@@ -818,6 +833,114 @@ describe('RenewAccessTokenMutationResolver', () => {
         await expect(refusedRenewal)
           .rejects
           .toThrow(/^204\.M003\.002$/u)
+        const sessionClerk = SessionClerk.create({
+          AccessTokenModel: StaffMemberAccessToken,
+          RefreshTokenModel: StaffMemberRefreshToken,
+        })
+
+        const actual = await sessionClerk.findRefreshToken({
+          refreshToken: params.refreshToken,
+        })
+
+        expect(actual)
+          .toEqual(expected)
+      })
+    })
+  })
+})
+
+describe('RenewAccessTokenMutationResolver', () => {
+  describe('#resolve()', () => {
+    /*
+     * **A renewal it cannot hand the new cookie back to is refused, and the presented token is
+     * left unspent.**
+     *
+     * The engine's endpoint also carries a WebSocket channel — `GraphqlServerBuilder#setupServer()`
+     * opens one for every audience, with no configuration flag — and over it there is no express
+     * response, so `BaseAppGraphqlContext#get:expressResponse` is null and
+     * `RefreshTokenExpressCookieClerk#saveRefreshTokenCookie()` writes through an optional call
+     * that silently does nothing. A renewal that rotated first would spend the presented token,
+     * mint a successor nobody can ever present or revoke, and answer with a working access token.
+     *
+     * The presented token here is **live**: unspent, unrevoked, inside its lifetime, on a series
+     * that has renewed nothing this hour. So every check above the guard passes, and without the
+     * guard this renewal succeeds — which is what makes the test fail without it.
+     *
+     * The read-back is the Act, in the shape the limit's own describe above uses: what is asserted
+     * is what the refusal left behind, and a rotation that had happened would show `usedAt` set on
+     * the presented token. The refusal itself is absorbed by an expectation rather than ignored, so
+     * a resolver that stopped refusing could not let the read-back pass quietly.
+     */
+    describe('should refuse a renewal it has no way to hand the new cookie to', () => {
+      const cases = [
+        {
+          params: {
+            staffMemberId: 10110006, // seeded: Yuuto Kirishima
+            sessionKey: 'renew-resolver-undeliverable-series-0561',
+            refreshToken: 'cccccccccccccccccccccccccccccccccccccccccccccccccccccccccccc0561',
+            generatedAt: new Date('2026-10-14T09:00:00.000Z'),
+            expiredAt: new Date('2026-10-28T09:00:00.000Z'),
+            cookieHeader: 'staff_refresh_token=cccccccccccccccccccccccccccccccccccccccccccccccccccccccccccc0561',
+            presentedAt: new Date('2026-10-14T09:14:00.000Z'),
+          },
+          expected: expect.objectContaining({
+            sessionKey: 'renew-resolver-undeliverable-series-0561',
+            usedAt: null,
+            revokedAt: null,
+          }),
+        },
+        {
+          params: {
+            staffMemberId: 10110010, // seeded: Daiki Morishita
+            sessionKey: 'renew-resolver-undeliverable-series-0562',
+            refreshToken: 'cccccccccccccccccccccccccccccccccccccccccccccccccccccccccccc0562',
+            generatedAt: new Date('2026-10-15T09:00:00.000Z'),
+            expiredAt: new Date('2026-10-29T09:00:00.000Z'),
+            cookieHeader: 'staff_refresh_token=cccccccccccccccccccccccccccccccccccccccccccccccccccccccccccc0562',
+            presentedAt: new Date('2026-10-15T09:14:00.000Z'),
+          },
+          expected: expect.objectContaining({
+            sessionKey: 'renew-resolver-undeliverable-series-0562',
+            usedAt: null,
+            revokedAt: null,
+          }),
+        },
+      ]
+
+      test.each(cases)('sessionKey: $params.sessionKey', async ({
+        params,
+        expected,
+      }) => {
+        const refreshTokenEntity = StaffMemberRefreshToken.buildWithGeneratedAttributes({
+          userId: params.staffMemberId,
+          sessionKey: params.sessionKey,
+          refreshToken: params.refreshToken,
+          generatedAt: params.generatedAt,
+          expiredAt: params.expiredAt,
+        })
+        await refreshTokenEntity.save()
+        const resolver = RenewAccessTokenMutationResolver.create()
+        const context = /** @type {*} */ ({
+          now: params.presentedAt,
+          cookieHeader: params.cookieHeader,
+          expressResponse: null, // what a request over the WebSocket channel carries
+          config: {
+            graphqlEndpoint: '/graphql-staff',
+            refreshTokenCookie: {
+              name: 'staff_refresh_token',
+              lifetimeDays: 14,
+              secure: true,
+              sameSite: 'lax',
+              httpOnly: true,
+            },
+          },
+        })
+        const refusedRenewal = () => resolver.resolve({
+          context,
+        })
+        await expect(refusedRenewal)
+          .rejects
+          .toThrow(/^204\.M003\.001$/u)
         const sessionClerk = SessionClerk.create({
           AccessTokenModel: StaffMemberAccessToken,
           RefreshTokenModel: StaffMemberRefreshToken,
