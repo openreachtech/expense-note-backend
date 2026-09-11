@@ -17,6 +17,11 @@ describe('validate-unique-error-code', () => {
           poolPath: rootPath.to('server/graphql/resolvers/admin/actual/'),
         },
       },
+      {
+        params: {
+          poolPath: rootPath.to('server/graphql/resolvers/staff/actual/'),
+        },
+      },
     ]
 
     test.each(cases)('poolPath: $params.poolPath', async ({ params }) => {

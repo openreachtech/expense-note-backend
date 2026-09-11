@@ -125,6 +125,33 @@ export default class RefreshTokenExpressCookieClerk {
   }
 
   /**
+   * Whether this request has anything to write a cookie to.
+   *
+   * **Why a caller has to ask.** `#saveRefreshTokenCookie()` below writes through an optional
+   * call, so where there is no response it does nothing and says nothing — and a resolver that
+   * minted a token pair would have thrown the refresh half away while answering with a working
+   * access token, leaving a refresh row nobody can present and nobody can revoke until it
+   * expires. A session operation therefore asks this **before** it commits a pair, and refuses
+   * instead of minting one it cannot deliver.
+   *
+   * **This asks about a capability, not about a transport.** The engine's endpoint also carries a
+   * WebSocket channel — `GraphqlServerBuilder#setupServer()` opens one for every audience, with no
+   * configuration flag, and that channel is the framework's — and over it there is no express
+   * response, so `BaseAppGraphqlContext#get:expressResponse` is null. That is the case this
+   * answers today, but it is not what the question names: reading a protocol or a header would
+   * stop being true the day the framework changed transports, whereas "is there a response to
+   * write to" is the thing the write actually needs.
+   *
+   * Truthiness rather than `!== null`, because an optional call is refused by every nullish value
+   * and `#get:expressResponse` is not the only way a context can be built.
+   *
+   * @returns {boolean} true: a cookie written now reaches the caller.
+   */
+  canSaveRefreshTokenCookie () {
+    return Boolean(this.context.expressResponse)
+  }
+
+  /**
    * Hand a refresh token to the browser as an `HttpOnly` cookie.
    *
    * @param {{

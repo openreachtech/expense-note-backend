@@ -1,0 +1,46 @@
+################################################################################
+#### The shared block of the staff audience
+####
+#### Scalars and the pagination pair, declared once for every domain file beside
+#### this one to reference. Taken verbatim from the pinned contract at
+#### .hora/contracts/1.0.0/staff-graphql.graphql.
+####
+#### None of the sign-in operations uses any of it, and that is expected: this
+#### file holds the audience's shared plumbing, not one domain's types.
+################################################################################
+
+################################################################################
+#### SCALARS
+################################################################################
+
+scalar DateTime
+
+################################################################################
+#### PAGINATION
+################################################################################
+
+type Pagination {
+  limit: Int!
+  offset: Int!
+  sort: Sort
+  totalRecords: Int!
+}
+
+input PaginationInput {
+  limit: Int!
+  offset: Int!
+  sort: SortInput
+}
+
+# Shape taken from the framework's own RequestSort (`key` / `direction`, DESC recognized,
+# ascending by default) rather than invented. No operation in 1.0.0 lets the caller choose a
+# sort, so this pair is declared for the convention's pagination shape and left unused.
+type Sort {
+  key: String!
+  direction: String!
+}
+
+input SortInput {
+  key: String!
+  direction: String!
+}

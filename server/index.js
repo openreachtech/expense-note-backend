@@ -7,6 +7,7 @@ import {
 
 import CustomerGraphqlServerEngine from './graphql/CustomerGraphqlServerEngine.js'
 import AdminGraphqlServerEngine from './graphql/AdminGraphqlServerEngine.js'
+import StaffGraphqlServerEngine from './graphql/StaffGraphqlServerEngine.js'
 
 import AppRestfulApiServerEngine from './restfulapi/AppRestfulApiServerEngine.js'
 
@@ -32,6 +33,14 @@ GraphqlServerBuilder.createAsync({
   .then(builder =>
     builder.buildHttpServer()
       .listen(5800, LOOPBACK_HOST)
+  )
+
+GraphqlServerBuilder.createAsync({
+  Engine: StaffGraphqlServerEngine,
+})
+  .then(builder =>
+    builder.buildHttpServer()
+      .listen(4900, LOOPBACK_HOST)
   )
 
 RestfulApiServerBuilder.createAsync({

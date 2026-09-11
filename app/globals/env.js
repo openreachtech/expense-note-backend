@@ -25,5 +25,6 @@ export default /** @type {*} */ (
  *   AUTH_COOKIE_SAME_SITE: string
  *   AUTH_COOKIE_PATH: string
  *   AUTH_COOKIE_DOMAIN: string
+ *   STAFF_CORS_ALLOWED_ORIGINS: string
  * }} EnvType
  */
