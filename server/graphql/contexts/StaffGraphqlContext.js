@@ -1,3 +1,9 @@
+import SessionClerk from '../../../app/session/SessionClerk.js'
+
+import StaffMember from '../../../sequelize/models/StaffMember.js'
+import StaffMemberAccessToken from '../../../sequelize/models/StaffMemberAccessToken.js'
+import StaffMemberRefreshToken from '../../../sequelize/models/StaffMemberRefreshToken.js'
+
 import BaseAppGraphqlContext from './BaseAppGraphqlContext.js'
 
 /**
@@ -13,34 +19,63 @@ import BaseAppGraphqlContext from './BaseAppGraphqlContext.js'
  */
 export default class StaffGraphqlContext extends BaseAppGraphqlContext {
   /**
+   * get: SessionClerk class — a seam so tests can substitute it.
+   *
+   * @returns {typeof SessionClerk} The class.
+   */
+  static get SessionClerkCtor () {
+    return SessionClerk
+  }
+
+  /**
+   * get: StaffMember model — a seam so tests can substitute it.
+   *
+   * @returns {typeof StaffMember} The model.
+   */
+  static get StaffMemberCtor () {
+    return StaffMember
+  }
+
+  /**
+   * get: StaffMemberAccessToken model — a seam so tests can substitute it.
+   *
+   * @returns {typeof StaffMemberAccessToken} The model.
+   */
+  static get StaffMemberAccessTokenCtor () {
+    return StaffMemberAccessToken
+  }
+
+  /**
+   * get: StaffMemberRefreshToken model — a seam so tests can substitute it.
+   *
+   * @returns {typeof StaffMemberRefreshToken} The model.
+   */
+  static get StaffMemberRefreshTokenCtor () {
+    return StaffMemberRefreshToken
+  }
+
+  /**
    * Find the member of staff a request's access token belongs to.
    *
-   * **NOT IMPLEMENTED YET, AND DELIBERATELY SO.** It returns null for every request, which means
-   * every operation the engine does not list in `schemasToSkipFiltering` is refused
-   * `Unauthenticated`. That is the correct answer while this audience has no resolvers — spec
-   * section 10 requires `signedInStaffMember` to refuse a caller with no session — and it becomes
-   * silently wrong the moment a resolver expects a session to work. Checkpoint 6 of `#sign-in`
-   * discharges it, and cannot pass its own gate until it does: section 10's "a session survives a
-   * page reload" is unreachable while this returns null.
+   * The framework calls this on **every** request — including the operations
+   * `schemasToSkipFiltering` exempts — and publishes what it returns as `#userEntity`, hence as
+   * `#staffMember` and `#staffMemberId` below. A request that carried no access token is therefore
+   * answered before anything is read: `signIn` has no token to look up and must not pay for a
+   * query to learn it.
    *
-   * What it owes, exactly:
+   * **What comes back is the member of staff, not the access token row.** The framework derives
+   * `#userId` as `userEntity.id`, so returning the token row would quietly publish the *token's*
+   * id as `#staffMemberId`, and every resolver reading the signed-in caller's id would name the
+   * wrong row while still looking like it worked. The token is read for the id it carries
+   * (`#extractUserId()`) and for nothing else.
    *
-   * 1. Look `accessToken` up in `staff_member_access_tokens` (spec section 9.6), which stores the
-   * token in the clear under a unique index, and refuse it unless the row answers
-   * `isAvailable({ pointsAt: requestedAt })` — a row past its fifteen-minute expiry is not a
-   * session. A lookup with no expiry check is the failure mode to watch for: it authenticates
-   * every token ever issued, forever.
-   * 2. Read it through `SessionClerk` (`app/session/SessionClerk.js`), which is this project's
-   * single window on session data — "callers depend only on this class and never touch the
-   * tables themselves". It carries `findRefreshToken()` today and **no** access-token read, so
-   * the method it needs is one of the modules checkpoint 5 adds. Querying
-   * `StaffMemberAccessToken` straight from this class would put a second door on the same
-   * tables.
-   * 3. Decide what the returned entity is, because the framework publishes `userEntity.id` as
-   * `#userId` — and therefore as `#staffMemberId` below. Return the access-token row and
-   * `context.staffMemberId` becomes the *token's* id, not the member of staff's. Either return
-   * the member of staff (carrying the token's series key alongside if a resolver needs it) or
-   * override `#get:userId`; do not leave the two reading alike.
+   * The lookup goes through `SessionClerk`, this project's single window on session data, whose
+   * `#findAvailableAccessToken()` refuses a row past its fifteen minutes (spec section 9.6). The
+   * expiry rule is not restated here, and this class never queries the token tables itself — one
+   * door on them, not two.
+   *
+   * Every refusal is a bare `null`. Nothing is logged and nothing is returned that could carry a
+   * token, a digest or an address (spec section 7).
    *
    * @override
    * @param {{
@@ -55,12 +90,64 @@ export default class StaffGraphqlContext extends BaseAppGraphqlContext {
     accessToken,
     requestedAt,
   }) {
-    // TODO: Must fulfill this method. See the three obligations in the docblock above.
-    return super.findUser({
-      expressRequest,
+    if (!accessToken) {
+      return null
+    }
+
+    const sessionClerk = this.createSessionClerk()
+
+    const accessTokenEntity = await sessionClerk.findAvailableAccessToken({
       accessToken,
-      requestedAt,
+      pointsAt: requestedAt,
     })
+
+    if (!accessTokenEntity) {
+      return null
+    }
+
+    return this.findStaffMember({
+      staffMemberId: accessTokenEntity.extractUserId(),
+    })
+  }
+
+  /**
+   * Create the session clerk this audience reads its sessions through.
+   *
+   * Both token models are handed over, not only the one `#findUser()` reads: the clerk is
+   * audience-neutral and holds the pair, so the staff audience is the pair it is given.
+   *
+   * @returns {SessionClerk} Session clerk over the staff token tables.
+   */
+  static createSessionClerk () {
+    return this.SessionClerkCtor.create({
+      AccessTokenModel: this.StaffMemberAccessTokenCtor,
+      RefreshTokenModel: this.StaffMemberRefreshTokenCtor,
+    })
+  }
+
+  /**
+   * Find the member of staff an id names.
+   *
+   * Reading `staff_members` from here is not a second door onto the session tables — the clerk
+   * deliberately holds the two token models and nothing else, and this is the profile table.
+   *
+   * Null when the id names nobody, which a live token can still do: the tables carry no DB-level
+   * foreign-key constraint, so a token can outlive the row it points at.
+   *
+   * @param {{
+   *   staffMemberId: number
+   * }} params - Parameters of this method.
+   * @returns {Promise<renchan.UserEntity | null>} Member of staff, or null when the id names nobody.
+   */
+  static async findStaffMember ({
+    staffMemberId,
+  }) {
+    const entity = /** @type {renchan.UserEntity | null} */ (
+      await this.StaffMemberCtor.findByPk(staffMemberId)
+    )
+
+    return entity
+      ?? null
   }
 
   /**
@@ -84,8 +171,8 @@ export default class StaffGraphqlContext extends BaseAppGraphqlContext {
   /**
    * get: Id of the member of staff of this request.
    *
-   * An alias of `#userId`, which the framework derives as `userEntity.id` — so this reads
-   * correctly only for whatever entity `.findUser()` returns. See the note there.
+   * An alias of `#userId`, which the framework derives as `userEntity.id` — and `.findUser()`
+   * returns the member of staff, so this is the member of staff's own id.
    *
    * @returns {number | null} Id of the member of staff.
    * @example
