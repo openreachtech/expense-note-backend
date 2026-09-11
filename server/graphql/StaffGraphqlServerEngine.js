@@ -136,12 +136,23 @@ export default class StaffGraphqlServerEngine extends BaseAppGraphqlServerEngine
    * `Access-Control-Allow-Credentials` — but that left the whole of the protection resting on one
    * cookie attribute, with no origin control of any kind behind it.
    *
-   * **A missing or misspelled variable yields an empty list, never a wildcard**, which is the same
-   * shape `BaseAppGraphqlServerEngine.usesSecureRefreshTokenCookie` is written in: the unsafe
-   * value has to be asked for explicitly. An empty list denies every cross-origin reader — `cors`
-   * reflects an origin only when the list holds it, and an empty **array** is not the falsy value
-   * it reads as "allow any" (an empty string or a null would be, which is why the list is always
-   * built as an array).
+   * **A missing or misspelled variable yields an empty list, never a wildcard.** It goes further
+   * than `BaseAppGraphqlServerEngine.usesSecureRefreshTokenCookie`, where the unsafe value can be
+   * asked for explicitly: **there is no way to ask for a wildcard through this key at all.**
+   * Setting it to `*` produces `['*']`, and `cors` compares an array element by element against
+   * the request's `Origin`, which is never the literal `*` — so a deliberate asterisk denies
+   * every origin rather than allowing them. Safe, and worth knowing before debugging a blocked
+   * frontend. An empty list denies every cross-origin reader — `cors` reflects an origin only
+   * when the list holds it.
+   *
+   * **Where the wildcard actually comes from, measured rather than assumed.** `cors()` and
+   * `cors({})` — called with the `origin` option **omitted** — merge the library's own default of
+   * `'*'` and allow any origin. A falsy *value* does not: `undefined`, `null`, `''` and `[]` each
+   * send no `Access-Control-Allow-Origin` at all. So what this getter guarantees is that the
+   * engine always passes an `origin` key, whatever the setting resolves to — not that an array is
+   * somehow safer than the empty string. An earlier revision of this comment claimed an empty
+   * string or a null would be read as "allow any"; that was wrong, and the four values were
+   * checked against the installed `cors` before this sentence was written.
    *
    * Same-origin callers are unaffected either way: a browser asks for none of these headers when
    * the page and the endpoint share an origin.
