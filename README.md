@@ -154,6 +154,51 @@ Variables are read through `@openreachtech/renchan-env`, which loads the dotenv 
 
 Development runs on a file, which is why `npm run db:refresh` can throw the database away and rebuild it in one step.
 
+#### Verifying against the real dialect
+
+**A migration can pass every local check and still be wrong.** `development` runs on SQLite, which
+reads a `bigint` primary key back as `INTEGER`, every `datetime(3)` as a bare `DATETIME`, and is lax
+about `varchar(191)` — so the column types section 9 of the spec declares are never exercised by a
+development run or by `npm test`. The MariaDB container exists for exactly this.
+
+```bash
+./docker.sh start          # MariaDB 10.5.12 on 127.0.0.1:3306, the version CI pins
+npm run db:refresh:live    # unwind, migrate and seed it, against NODE_ENV=live
+./docker.sh stop
+```
+
+`db:refresh:live` is the `live` counterpart of `db:refresh`. It differs in one way that matters:
+**MariaDB cannot be torn down by deleting a file**, so `db:teardown:live` unwinds the schema with
+`db:migrate:undo:all` rather than `rm`. Re-running the seeders without that step fails on a duplicate
+primary key — sequelize-cli's seeder storage here is `none`, so every seeder re-runs on every
+invocation.
+
+**What it leaves you to look at**, counted against the container rather than from memory:
+
+| table | rows |
+| :-- | --: |
+| `staff_members` | 13 |
+| `staff_member_secrets` | 11 |
+| `staff_member_password_hashes` | 11 |
+| `expense_categories` | 4 (master) |
+
+**Ten of the thirteen can actually sign in.** Signing in needs both halves — the address to be found
+by, and the digest to compare against — so the count that matters is the join, not either table's
+row count. Three members of staff are deliberately short of one: **one has an address and no digest,
+one has a digest and no address, and one has neither.** Accounts are issued by hand outside the
+product (§4), so a half-issued one is the likeliest way one goes wrong, and §10's identical-refusal
+criterion needs a row to test against.
+
+`expenses` seeds **no rows** — `sequelize/seeders/development/` holds only the three staff-account
+seeders, and expenses arrive with `#expense-entry`.
+
+The plaintext passwords are in the password-hash seeder beside each digest.
+
+> **Note for Windows.** Both `db:refresh` and `db:refresh:live` begin with `export`, which npm runs
+> through `cmd.exe` on Windows, where it is not a command. Run the four steps individually with
+> `NODE_ENV` set in the environment instead. This is a pre-existing property of `db:refresh`, not
+> something the `:live` variant introduced.
+
 ## API
 
 Class members are written with the following notation.
