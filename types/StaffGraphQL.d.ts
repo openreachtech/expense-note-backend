@@ -79,5 +79,77 @@ declare global {
       name: string
       email: string
     }
+
+    ////////////////////////////////////////////////////////////////////////////
+    //// Expense entry — 003-expense-entry.graphql
+    ////////////////////////////////////////////////////////////////////////////
+
+    interface ExpenseCategory {
+      id: number
+      name: string
+      displayOrder: number
+    }
+
+    // `spentOn` is a string, not a Date: it crosses the contract as an ISO 'YYYY-MM-DD' day with
+    // no time of day, which is also the form a DATEONLY column reaches the application in.
+    // `createdAt` / `updatedAt` are Date, because a resolver hands the DateTime scalar a Date and
+    // the scalar serializes it on the way out.
+    interface Expense {
+      id: number
+      spentOn: string
+      amount: number
+      memo: string | null
+      status: string
+      expenseCategory: ExpenseCategory
+      createdAt: Date
+      updatedAt: Date
+    }
+
+    interface ExpensesInput {
+      pagination: PaginationInput
+    }
+
+    interface ExpensesResult {
+      expenses: Array<Expense>
+      pagination: Pagination
+    }
+
+    // There is no ExpenseCategoriesInput: the operation takes no argument at all.
+    interface ExpenseCategoriesResult {
+      expenseCategories: Array<ExpenseCategory>
+    }
+
+    interface RecordExpenseInput {
+      spentOn: string
+      amount: number
+      expenseCategoryId: number
+      memo?: string | null
+    }
+
+    interface RecordExpenseResult {
+      expenseId: number
+    }
+
+    // A full replace, not a patch: every field but the memo is required, so a correction that
+    // omits the memo clears it.
+    interface CorrectExpenseInput {
+      expenseId: number
+      spentOn: string
+      amount: number
+      expenseCategoryId: number
+      memo?: string | null
+    }
+
+    interface CorrectExpenseResult {
+      expenseId: number
+    }
+
+    interface RemoveExpenseInput {
+      expenseId: number
+    }
+
+    interface RemoveExpenseResult {
+      expenseId: number
+    }
   }
 }
