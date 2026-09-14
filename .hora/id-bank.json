@@ -1,4 +1,5 @@
 {
   "data-model": "100",
-  "sign-in": "101"
+  "sign-in": "101",
+  "expense-entry": "102"
 }
