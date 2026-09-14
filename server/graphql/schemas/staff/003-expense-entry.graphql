@@ -1,0 +1,121 @@
+################################################################################
+#### Recording, correcting and removing an expense, and reading back one's own
+####
+#### spec 1.0.0 section 11.1 is the complete operation list of this domain, and
+#### every type below is taken verbatim from the pinned contract at
+#### .hora/contracts/1.0.0/staff-graphql.graphql.
+####
+#### `Pagination`, `PaginationInput`, `Sort`, `SortInput` and the `DateTime`
+#### scalar are declared once in 001-common.graphql and referenced here. None of
+#### them is redeclared: the loader concatenates every file in this directory
+#### into one schema, so a second declaration is a duplicate type, not an
+#### override.
+####
+#### `Expense` and `ExpenseCategory` live here rather than in the shared file
+#### because this domain is where they are written. `#monthly-summary` reuses
+#### `Expense` as the contract's own comment says it does, so that a month's
+#### entries and the total taken over them can never describe different shapes.
+################################################################################
+
+################################################################################
+#### QUERY
+################################################################################
+
+type Query {
+  expenses(input: ExpensesInput!): ExpensesResult!
+
+  # No argument: the operation answers about the caller's own category master and
+  # takes nothing to narrow it. The convention gives an operation with no input no
+  # argument at all, so no empty input type is declared.
+  expenseCategories: ExpenseCategoriesResult!
+}
+
+################################################################################
+#### MUTATION
+################################################################################
+
+# Every mutation answers with the identifier of what it wrote and nothing else
+# (spec 11.1). The screen re-reads through `expenses`, which is CQRS as the
+# architecture rule states it.
+type Mutation {
+  recordExpense(input: RecordExpenseInput!): RecordExpenseResult!
+  correctExpense(input: CorrectExpenseInput!): CorrectExpenseResult!
+  removeExpense(input: RemoveExpenseInput!): RemoveExpenseResult!
+}
+
+################################################################################
+#### INPUT
+################################################################################
+
+input ExpensesInput {
+  pagination: PaginationInput!
+}
+
+# ExpenseCategoriesInput() carries no fields, so it is not declared.
+
+input RecordExpenseInput {
+  spentOn: String!
+  amount: Int!
+  expenseCategoryId: Int!
+  memo: String                # allow null: the memo is optional
+}
+
+# A full replace, not a patch: `spentOn`, `amount` and `expenseCategoryId` are
+# each required, so a correction that omits the memo clears it.
+input CorrectExpenseInput {
+  expenseId: Int!
+  spentOn: String!
+  amount: Int!
+  expenseCategoryId: Int!
+  memo: String                # allow null: the memo is optional
+}
+
+input RemoveExpenseInput {
+  expenseId: Int!
+}
+
+################################################################################
+#### TYPE
+################################################################################
+
+# One row type, reused by expenses and monthlyExpenses, so that a month's entries
+# and the total taken over them can never describe different shapes.
+type Expense {
+  id: Int!
+  spentOn: String!            # ISO YYYY-MM-DD. A date with no time of day
+  amount: Int!                # yen. An integer, because the yen has no minor unit
+  memo: String                # nullable: the one genuinely optional field, per spec 9.3
+  status: String!             # `recorded` in 1.0.0. The approval seam
+  expenseCategory: ExpenseCategory!
+  createdAt: DateTime!
+  updatedAt: DateTime!
+}
+
+type ExpenseCategory {
+  id: Int!
+  name: String!
+  displayOrder: Int!
+}
+
+# Most recent first by `spentOn` — the day the money was paid, not the day it was
+# recorded (spec 11.2, and the index spec 9.3 declares for it).
+type ExpensesResult {
+  expenses: [Expense!]!
+  pagination: Pagination!
+}
+
+type ExpenseCategoriesResult {
+  expenseCategories: [ExpenseCategory!]!
+}
+
+type RecordExpenseResult {
+  expenseId: Int!
+}
+
+type CorrectExpenseResult {
+  expenseId: Int!
+}
+
+type RemoveExpenseResult {
+  expenseId: Int!
+}
