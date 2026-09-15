@@ -7,6 +7,7 @@ import {
 } from '@openreachtech/renchan'
 
 import StaffGraphqlServerEngine from '../../../../../../../server/graphql/StaffGraphqlServerEngine.js'
+import StaffGraphqlContext from '../../../../../../../server/graphql/contexts/StaffGraphqlContext.js'
 
 /*
  * The five operations `#expense-entry` adds, driven as a caller reaches them: as real GraphQL
@@ -30,15 +31,28 @@ import StaffGraphqlServerEngine from '../../../../../../../server/graphql/StaffG
  * therefore does not evidence is the socket itself** — the express app, the middleware, the JSON
  * body parser and the CORS allow-list are not exercised here, and will not be until Q24 is closed.
  *
- * **`contextValue` is null in every case, and that is the point rather than a shortcut.** These
- * five operations exist only in the stub pool, and renchan builds its authentication filter hash
- * from the `actual/` pool alone, so each is handed `filter === undefined` and nothing refuses the
- * call. Passing no context at all is the plainest demonstration of it: there is not even an object
- * a session could have been read off, and every operation answers anyway. **So this file evidences
- * that the five are callable, and simultaneously that they are callable by anybody** — which spec
- * section 7's Authentication row and section 11's own criterion say they must not be. That
- * criterion is not met at this checkpoint and cannot be; it is the `actual/` resolvers at
- * checkpoint 6 that meet it.
+ * **Four of the five are still stubs; `expenses` is not, as of checkpoint 6.** Its `actual/`
+ * resolver now exists, and renchan resolves a field from the actual pool before the stub pool
+ * (`actualResolverSchemaHash[schema] ?? stubResolverSchemaHash[schema]`), so the `expenses` field
+ * of this schema is wired to the real resolver. The stub class is still there and still tested
+ * beside this file, because the frontend builds against it until checkpoint 16 — it is simply no
+ * longer what a caller reaches through the schema.
+ *
+ * **`contextValue` is therefore null for the four that remain stubbed, and a real session-less
+ * context for `expenses`.** renchan builds its authentication filter hash from the `actual/` pool
+ * alone, so a stub-only field is handed `filter === undefined` and nothing refuses the call:
+ * passing no context at all is the plainest demonstration of it, since there is not even an object
+ * a session could have been read off and the operation answers anyway. **So for those four this
+ * file evidences that they are callable, and simultaneously that they are callable by anybody** —
+ * which spec section 7's Authentication row and section 11's own criterion say they must not be.
+ * That criterion is not met for them at this checkpoint and cannot be; it is their own `actual/`
+ * resolvers that will meet it.
+ *
+ * **For `expenses` the same criterion is met, and the first block below is where that is shown.**
+ * A context is built the way the framework builds one — `StaffGraphqlContext.createAsync()` over a
+ * request carrying no access-token header — so the refusal that comes back is the engine's real
+ * `102.X000.001`, raised before the resolver is entered, rather than an artifact of handing the
+ * filter a null to read `canResolve` off.
  *
  * What each case asserts is the response's payload. An operation the filter refused, or one no
  * resolver was wired to, comes back with that payload null and an error beside it, so neither can
@@ -58,18 +72,25 @@ import StaffGraphqlServerEngine from '../../../../../../../server/graphql/StaffG
 
 describe('execute-expense-stub-operations', () => {
   /*
-   * Two pages of the same twelve entries, asked for through the schema with variables, exactly as
-   * a client will ask.
+   * `expenses` asked for through the schema with variables, exactly as a client will ask, and by a
+   * caller holding no session.
    *
-   * The first case takes the top of the list and so pins the ordering the operation owes — newest
-   * `spentOn` first — and carries the entry whose memo is null, which crosses the wire as a JSON
-   * null rather than as a failure. The second asks for five and is answered with the two that are
-   * left, where `totalRecords` is visibly the size of the whole set rather than of the page.
+   * **It is refused, and that is section 11's criterion rather than a regression.** Until
+   * checkpoint 6 this same request was answered — to anybody — because the operation existed only
+   * in the stub pool, which renchan's filter hash is not built from. Its `actual/` resolver now
+   * exists and `expenses` is deliberately absent from
+   * `StaffGraphqlServerEngine#get:schemasToSkipFiltering`, so the authentication filter runs and
+   * refuses before a resolver is reached.
    *
-   * The sort clause is presented in the first and omitted in the second. It comes back as it was
-   * sent, and as `null` when it was not sent: no operation in 1.0.0 lets a caller choose a sort.
+   * What each case asserts is the error the refusal carries: `102.X000.001` is the engine's
+   * `Unauthenticated`, declared in `StaffGraphqlServerEngine.standardErrorCodeHash`. It names no
+   * member of staff, no row and no count.
+   *
+   * The two cases differ in what was asked for — a page with a sort clause presented, and a page
+   * without one. Neither reaches the resolver, which is the point: a caller with no session is
+   * refused before the operation reads anything at all, including their input.
    */
-  describe('should answer the expenses query through the built schema, with no session presented', () => {
+  describe('should refuse the expenses query through the built schema, with no session presented', () => {
     const cases = [
       {
         params: {
@@ -111,63 +132,11 @@ describe('execute-expense-stub-operations', () => {
             },
           },
         },
-        expected: {
-          expenses: {
-            expenses: [
-              {
-                id: 9101,
-                spentOn: '2026-09-12',
-                amount: 1200,
-                memo: 'Taxi back from the client office',
-                status: 'recorded',
-                expenseCategory: {
-                  id: 10000001,
-                  name: 'transport',
-                  displayOrder: 1,
-                },
-                createdAt: '2026-09-12T13:05:00.000Z',
-                updatedAt: '2026-09-12T13:05:00.000Z',
-              },
-              {
-                id: 9102,
-                spentOn: '2026-09-11',
-                amount: 880,
-                memo: 'Lunch while visiting the branch',
-                status: 'recorded',
-                expenseCategory: {
-                  id: 10000002,
-                  name: 'meals',
-                  displayOrder: 2,
-                },
-                createdAt: '2026-09-11T09:40:00.000Z',
-                updatedAt: '2026-09-11T09:40:00.000Z',
-              },
-              {
-                id: 9103,
-                spentOn: '2026-09-09',
-                amount: 3400,
-                memo: null, // the optional memo, read back empty rather than failing
-                status: 'recorded',
-                expenseCategory: {
-                  id: 10000003,
-                  name: 'supplies',
-                  displayOrder: 3,
-                },
-                createdAt: '2026-09-09T02:15:00.000Z',
-                updatedAt: '2026-09-09T02:15:00.000Z',
-              },
-            ],
-            pagination: {
-              limit: 3,
-              offset: 0,
-              sort: {
-                key: 'spentOn',
-                direction: 'DESC',
-              },
-              totalRecords: 12,
-            },
-          },
-        },
+        expected: [
+          expect.objectContaining({
+            message: '102.X000.001',
+          }),
+        ],
       },
       {
         params: {
@@ -177,24 +146,10 @@ describe('execute-expense-stub-operations', () => {
                 expenses {
                   id
                   spentOn
-                  amount
-                  memo
-                  status
-                  expenseCategory {
-                    id
-                    name
-                    displayOrder
-                  }
-                  createdAt
-                  updatedAt
                 }
                 pagination {
                   limit
                   offset
-                  sort {
-                    key
-                    direction
-                  }
                   totalRecords
                 }
               }
@@ -206,46 +161,11 @@ describe('execute-expense-stub-operations', () => {
             // sort: undefined
           },
         },
-        expected: {
-          expenses: {
-            expenses: [
-              {
-                id: 9111,
-                spentOn: '2026-08-18',
-                amount: 24800,
-                memo: 'Conference ticket, paid in advance',
-                status: 'recorded',
-                expenseCategory: {
-                  id: 10000004,
-                  name: 'other',
-                  displayOrder: 4,
-                },
-                createdAt: '2026-08-18T23:35:00.000Z',
-                updatedAt: '2026-08-18T23:35:00.000Z',
-              },
-              {
-                id: 9112,
-                spentOn: '2026-08-14',
-                amount: 640,
-                memo: 'Bus fare to the supplier',
-                status: 'recorded',
-                expenseCategory: {
-                  id: 10000001,
-                  name: 'transport',
-                  displayOrder: 1,
-                },
-                createdAt: '2026-08-14T10:00:00.000Z',
-                updatedAt: '2026-08-14T10:00:00.000Z',
-              },
-            ],
-            pagination: {
-              limit: 5,
-              offset: 10,
-              sort: null, // not presented, and nullable in the contract
-              totalRecords: 12,
-            },
-          },
-        },
+        expected: [
+          expect.objectContaining({
+            message: '102.X000.001',
+          }),
+        ],
       },
     ]
 
@@ -258,6 +178,13 @@ describe('execute-expense-stub-operations', () => {
         engine,
       })
       const schema = await schemaBuilder.buildSchema()
+      const context = await StaffGraphqlContext.createAsync({
+        expressRequest: /** @type {*} */ ({
+          headers: {}, // no access token: a caller holding no session
+        }),
+        requestParams: {},
+        engine,
+      })
 
       const response = await graphql({
         schema,
@@ -267,13 +194,96 @@ describe('execute-expense-stub-operations', () => {
             pagination: params.pagination,
           },
         },
-        contextValue: null, // no session, and not even a context to have read one off
+        contextValue: context,
+      })
+
+      const actual = response.errors
+
+      expect(actual)
+        .toEqual(expected)
+    })
+  })
+})
+
+describe('execute-expense-stub-operations', () => {
+  /*
+   * The same refusal, seen from the payload side: a refused operation answers with nothing at all.
+   *
+   * It is asserted apart from the error above rather than beside it, because a null result is its
+   * own case. The payload is pulled off the response and asserted on its own, rather than the
+   * whole response being compared in one go, because `data` is a denylisted identifier and may not
+   * be written as a key — `tests/_orders/SignIn/execute-staff-session-operations.js` reads it the
+   * same way for the same reason.
+   */
+  describe('when the expenses query is refused for want of a session', () => {
+    const cases = [
+      {
+        params: {
+          source: `
+            query ($input: ExpensesInput!) {
+              expenses (input: $input) {
+                pagination {
+                  totalRecords
+                }
+              }
+            }
+          `,
+          pagination: {
+            limit: 3,
+            offset: 0,
+          },
+        },
+      },
+      {
+        params: {
+          source: `
+            query ($input: ExpensesInput!) {
+              expenses (input: $input) {
+                expenses {
+                  id
+                }
+              }
+            }
+          `,
+          pagination: {
+            limit: 5,
+            offset: 10,
+          },
+        },
+      },
+    ]
+
+    test.each(cases)('pagination.offset: $params.pagination.offset', async ({
+      params,
+    }) => {
+      const engine = await StaffGraphqlServerEngine.createAsync()
+      const schemaBuilder = GraphqlSchemaBuilder.create({
+        engine,
+      })
+      const schema = await schemaBuilder.buildSchema()
+      const context = await StaffGraphqlContext.createAsync({
+        expressRequest: /** @type {*} */ ({
+          headers: {}, // no access token: a caller holding no session
+        }),
+        requestParams: {},
+        engine,
+      })
+
+      const response = await graphql({
+        schema,
+        source: params.source,
+        variableValues: {
+          input: {
+            pagination: params.pagination,
+          },
+        },
+        contextValue: context,
       })
 
       const actual = response.data
 
       expect(actual)
-        .toEqual(expected)
+        .toBeNull()
     })
   })
 })
