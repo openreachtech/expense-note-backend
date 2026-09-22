@@ -12,6 +12,8 @@ import {
 
 import AUTH_CONSTANT_HASH from '../../app/constants/authConstants.js'
 
+import GraphqlOperationShapeInspector from '../../app/tools/graphql/GraphqlOperationShapeInspector.js'
+
 import BaseAppGraphqlServerEngine from './BaseAppGraphqlServerEngine.js'
 
 import StaffGraphqlShare from './contexts/StaffGraphqlShare.js'
@@ -47,6 +49,34 @@ const CORS_ALLOWED_ORIGIN_SEPARATOR = ','
  * Raise it when an operation is added that genuinely carries more, and say which one here.
  */
 const MAX_JSON_BODY_SIZE = '16kb'
+
+/*
+ * What a caller is told when the document they presented is wider or deeper than this product
+ * will run.
+ *
+ * **`203` is the input-refusal prefix and `X000` is the engine's own id**, the same pair the four
+ * codes in `standardErrorCodeHash` below are built from. It is deliberately not a `Q###` or `M###`
+ * code: those belong to one operation apiece, fixed in `server/graphql/resolver-id-hash-staff.js`,
+ * and this refusal happens before any operation has been chosen — a document naming ten aliased
+ * `expenses` calls is refused as a document, not as `expenses`.
+ *
+ * It names nothing: not which limit was passed, not by how much, not which operation carried it. A
+ * caller sending a document this product declares no screen for is told it was refused, and a
+ * developer reads `constants/graphqlDocumentConstants.cjs` for the two numbers, which are public
+ * in the repository anyway.
+ */
+const EXCESSIVE_OPERATION_ERROR_CODE = '203.X000.001'
+
+/*
+ * The status a refused document comes back with.
+ *
+ * `400`, because the request was understood and is being rejected on its content — the GraphQL
+ * over HTTP specification gives exactly this status to a request that parses but does not pass
+ * validation, and the refusal below is a validation refusal that simply happens earlier than the
+ * schema-aware ones. It is not `429`: nothing here counts anything over time, and a caller is not
+ * being asked to slow down but to ask for less.
+ */
+const EXCESSIVE_OPERATION_STATUS_CODE = 400
 
 /**
  * Renchan server engine for staff.
@@ -122,6 +152,15 @@ export default class StaffGraphqlServerEngine extends BaseAppGraphqlServerEngine
    */
   static get corsClient () {
     return cors
+  }
+
+  /**
+   * get: The class reading the shape of a presented document — a seam so tests can substitute it.
+   *
+   * @returns {typeof GraphqlOperationShapeInspector} The inspector class.
+   */
+  static get GraphqlOperationShapeInspectorCtor () {
+    return GraphqlOperationShapeInspector
   }
 
   /**
@@ -204,6 +243,11 @@ export default class StaffGraphqlServerEngine extends BaseAppGraphqlServerEngine
    *
    * A `verify` callback stashing a `rawBody` is the second, and the reasons are below.
    *
+   * **One is here that the boilerplate has no equivalent of.** The document-shape refusal at
+   * position 2 is this audience's own, added once `#expense-entry` put a paginated, join-heavy
+   * read behind an operation a single document may name hundreds of times over; the method
+   * generating it, directly below, carries the whole reasoning.
+   *
    * @override
    * @returns {Array<import('express').RequestHandler>} Middleware, in the order a request meets them.
    */
@@ -216,6 +260,12 @@ export default class StaffGraphqlServerEngine extends BaseAppGraphqlServerEngine
       express.json({
         limit: MAX_JSON_BODY_SIZE,
       }),
+
+      /*
+       * Mounted immediately after the JSON parser, because it reads the body that parser produced,
+       * and before everything below it, because a document it refuses should cost nothing further.
+       */
+      this.generateExcessiveOperationRefusingMiddleware(),
 
       express.static(
         this.config.staticPath
@@ -241,6 +291,150 @@ export default class StaffGraphqlServerEngine extends BaseAppGraphqlServerEngine
         extended: true,
       }),
     ]
+  }
+
+  /**
+   * Generate the middleware refusing a document wider or deeper than this product will run.
+   *
+   * -------------------------------------------------------------------------------------------
+   * What it closes
+   * -------------------------------------------------------------------------------------------
+   *
+   * A GraphQL document may name one field many times over under different aliases, and every one
+   * of them is resolved. `MAX_JSON_BODY_SIZE` above holds the body to sixteen kilobytes and one
+   * aliased `expenses` call is about sixty-two bytes, so one request could carry on the order of
+   * two hundred and fifty of them — each running a `count()` and a `findAll()` of up to a hundred
+   * rows with `ExpenseCategory` joined, on a path no rate limit covers. The body cap does not
+   * close it: the body is small and the work is not.
+   *
+   * **This feature is what opened it.** Before `#expense-entry`, this audience exposed only
+   * `signIn`, `signOut`, `renewAccessToken` and `signedInStaffMember` — none paginated, none
+   * reading more than one row.
+   *
+   * -------------------------------------------------------------------------------------------
+   * Why it is here rather than in `validationRules`
+   * -------------------------------------------------------------------------------------------
+   *
+   * A `graphql` validation rule is the textbook place for this, and renchan does forward one:
+   * `GraphqlHttpHandlerBuilder#buildHandler()` passes `validationRules` straight to the handler.
+   * **But an engine cannot reach it.** That value comes from
+   * `GraphqlHttpHandlerBuilder.extraCreateHandlerParams` — a static getter on the *handler builder
+   * class*, returning `{}`, which `createAsync()` spreads without ever consulting the engine — and
+   * the handler builder class in turn comes from a static getter on `GraphqlServerBuilder`. Using
+   * it would mean a subclass of each, plus a change to `server/index.js` naming the new server
+   * builder. That last link is the problem: `server/index.js` cannot be imported on this machine
+   * at all (`ERR_UNSUPPORTED_ESM_URL_SCHEME`, recorded as Q24), so nothing could test that it was
+   * still wired, and reverting one line would silently remove the limit again.
+   *
+   * Mounted here, the whole chain is testable today: this method is asserted directly, its place
+   * in `collectMiddleware()` is asserted, and `server/index.js` already reaches this engine.
+   *
+   * -------------------------------------------------------------------------------------------
+   * It only ever refuses
+   * -------------------------------------------------------------------------------------------
+   *
+   * A request carrying no document, or carrying text that is not a document, is passed on
+   * untouched — GraphQL itself answers a syntax error with the line and the column, which is a far
+   * better answer than anything reachable from here. So the only outcome this middleware owns is
+   * the refusal; every other request leaves it exactly as it arrived. That is also why a static
+   * file request, which passes through here on its way to `express.static` below, costs one
+   * property read.
+   *
+   * @returns {import('express').RequestHandler} The middleware.
+   * @public
+   */
+  generateExcessiveOperationRefusingMiddleware () {
+    const refuseExcessiveOperation = (request, response, next) => {
+      const inspector = this.createOperationShapeInspector({
+        expressRequest: request,
+      })
+
+      if (!inspector?.hasExcessiveOperation()) {
+        next()
+
+        return
+      }
+
+      response
+        .status(EXCESSIVE_OPERATION_STATUS_CODE)
+        .json({
+          errors: [
+            {
+              message: EXCESSIVE_OPERATION_ERROR_CODE,
+            },
+          ],
+        })
+    }
+
+    return refuseExcessiveOperation
+  }
+
+  /**
+   * Create the inspector reading the document one request presented.
+   *
+   * **Answers null where there is nothing to inspect** — a request carrying no document text, or
+   * carrying text that does not parse. Both mean "not this middleware's to judge", and the caller
+   * above passes the request on.
+   *
+   * @param {{
+   *   expressRequest: import('express').Request
+   * }} params - Parameters.
+   * @returns {GraphqlOperationShapeInspector | null} The inspector, or null.
+   */
+  createOperationShapeInspector ({
+    expressRequest,
+  }) {
+    const source = this.extractRequestedSource({
+      expressRequest,
+    })
+
+    if (source === null) {
+      return null
+    }
+
+    const InspectorCtor = this.Ctor.GraphqlOperationShapeInspectorCtor
+
+    const document = InspectorCtor.parseSource({
+      source,
+    })
+
+    if (document === null) {
+      return null
+    }
+
+    return InspectorCtor.create({
+      document,
+    })
+  }
+
+  /**
+   * Extract the text of the document one request presented.
+   *
+   * Both places a caller may put it are read: the parsed JSON body of a POST, which is where every
+   * client of this product puts it, and the query string of a GET, which is what GraphiQL's
+   * "share" links and a hand-typed URL use. Neither is trusted to hold a string — a caller
+   * controls the shape of both, and `{"query": {}}` is a body `express.json` accepts.
+   *
+   * @param {{
+   *   expressRequest: import('express').Request
+   * }} params - Parameters.
+   * @returns {string | null} The document text, or null when the request carries none.
+   */
+  extractRequestedSource ({
+    expressRequest,
+  }) {
+    const postedSource = expressRequest.body?.query
+    const queriedSource = expressRequest.query?.query
+
+    if (typeof postedSource === 'string') {
+      return postedSource
+    }
+
+    if (typeof queriedSource === 'string') {
+      return queriedSource
+    }
+
+    return null
   }
 
   /**
