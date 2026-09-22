@@ -4,6 +4,14 @@ import {
 
 import BaseInputValidator from '../../../BaseInputValidator.js'
 
+import PAGINATION_CONSTANT_HASH from '../../../../../constants/paginationConstants.js'
+
+const {
+  PAGINATION: {
+    MAXIMUM_LIMIT,
+  },
+} = PAGINATION_CONSTANT_HASH
+
 /**
  * What `expenses`' input must satisfy before the operation reads a row.
  *
@@ -51,6 +59,10 @@ export default class ExpensesInputValidator extends BaseInputValidator {
         this.errorHash.InvalidLimit,
       ],
       [
+        () => this.isWithinMaximumLimit(),
+        this.errorHash.ExcessiveLimit,
+      ],
+      [
         () => this.isValidOffset(),
         this.errorHash.InvalidOffset,
       ],
@@ -67,6 +79,25 @@ export default class ExpensesInputValidator extends BaseInputValidator {
 
     return inspector.isIntegerLike()
       && inspector.isPositiveNumberLike()
+  }
+
+  /**
+   * Whether the presented page size is one this version will serve.
+   *
+   * Asked AFTER `isValidLimit()`, so a caller presenting nonsense is told the size is invalid
+   * rather than that it is too large -- the more specific complaint is the earlier one, and a
+   * negative limit is not "over the maximum" in any sense a reader would accept.
+   *
+   * `MAXIMUM_LIMIT` is Q50's chosen value and is not yet confirmed by the user; see
+   * `constants/paginationConstants.cjs`, which carries the reasoning and its standing.
+   *
+   * @returns {boolean} true: the page asked for is no larger than the maximum.
+   */
+  isWithinMaximumLimit () {
+    const inspector = this.createLimitInspector()
+
+    return inspector.isIntegerLike()
+      && Number(this.input.pagination?.limit) <= MAXIMUM_LIMIT
   }
 
   /**
@@ -116,6 +147,7 @@ export default class ExpensesInputValidator extends BaseInputValidator {
 /**
  * @typedef {{
  *   InvalidLimit: RenchanGraphqlErrorCtor
+ *   ExcessiveLimit: RenchanGraphqlErrorCtor
  *   InvalidOffset: RenchanGraphqlErrorCtor
  * }} ErrorHash
  */

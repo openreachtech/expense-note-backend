@@ -139,6 +139,9 @@ export default class ExpensesQueryResolver extends BaseQueryResolver {
       InvalidLimit: '203.Q002.001',
       InvalidOffset: '203.Q002.002',
 
+      // Q50, chosen and not yet confirmed -- see constants/paginationConstants.cjs
+      ExcessiveLimit: '203.Q002.003',
+
       // Database / state errors
       StaffMemberNotFound: '204.Q002.001',
     }

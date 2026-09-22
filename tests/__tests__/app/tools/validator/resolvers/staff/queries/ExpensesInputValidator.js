@@ -33,6 +33,7 @@ describe('ExpensesInputValidator', () => {
             },
             errorHash: {
               InvalidLimit: 'error-ctor-invalid-limit',
+              ExcessiveLimit: 'error-ctor-excessive-limit',
               InvalidOffset: 'error-ctor-invalid-offset',
             },
           },
@@ -47,6 +48,7 @@ describe('ExpensesInputValidator', () => {
             },
             errorHash: {
               InvalidLimit: 'error-ctor-invalid-limit',
+              ExcessiveLimit: 'error-ctor-excessive-limit',
               InvalidOffset: 'error-ctor-invalid-offset',
             },
           },
@@ -68,12 +70,19 @@ describe('ExpensesInputValidator', () => {
 describe('ExpensesInputValidator', () => {
   describe('#generateValidationEntries()', () => {
     /*
-     * Two rules, and no third one for `sort`: the pinned contract says no operation of 1.0.0 lets
-     * a caller choose a sort, and the resolver never hands it to the query, so there is nothing
-     * about it to be valid or invalid against. Each error class stands in as a marker string —
-     * this method only pairs a rule with its error, and a marker makes the pairing readable.
+     * Three rules, and no fourth one for `sort`: the pinned contract says no operation of 1.0.0
+     * lets a caller choose a sort, and the resolver never hands it to the query, so there is
+     * nothing about it to be valid or invalid against. Each error class stands in as a marker
+     * string — this method only pairs a rule with its error, and a marker makes the pairing
+     * readable.
+     *
+     * **The order is the contract, not an accident.** `ExcessiveLimit` is asked AFTER
+     * `InvalidLimit`, so a caller presenting `-3` is told the size is invalid rather than that it
+     * is over the maximum — the more specific complaint is the earlier one, and a negative limit
+     * is not "too large" in any sense a reader would accept. Swapping them would pass a test that
+     * only checked which errors exist.
      */
-    describe('should declare the two rules in order', () => {
+    describe('should declare the three rules in order', () => {
       const cases = [
         {
           factoryParams: {
@@ -85,11 +94,13 @@ describe('ExpensesInputValidator', () => {
             },
             errorHash: {
               InvalidLimit: 'error-ctor-invalid-limit',
+              ExcessiveLimit: 'error-ctor-excessive-limit',
               InvalidOffset: 'error-ctor-invalid-offset',
             },
           },
           expected: [
             [expect.any(Function), 'error-ctor-invalid-limit'],
+            [expect.any(Function), 'error-ctor-excessive-limit'],
             [expect.any(Function), 'error-ctor-invalid-offset'],
           ],
         },
@@ -103,11 +114,13 @@ describe('ExpensesInputValidator', () => {
             },
             errorHash: {
               InvalidLimit: 'error-ctor-invalid-limit',
+              ExcessiveLimit: 'error-ctor-excessive-limit',
               InvalidOffset: 'error-ctor-invalid-offset',
             },
           },
           expected: [
             [expect.any(Function), 'error-ctor-invalid-limit'],
+            [expect.any(Function), 'error-ctor-excessive-limit'],
             [expect.any(Function), 'error-ctor-invalid-offset'],
           ],
         },
@@ -146,6 +159,7 @@ describe('ExpensesInputValidator', () => {
             },
             errorHash: {
               InvalidLimit: 'error-ctor-invalid-limit',
+              ExcessiveLimit: 'error-ctor-excessive-limit',
               InvalidOffset: 'error-ctor-invalid-offset',
             },
           },
@@ -160,6 +174,7 @@ describe('ExpensesInputValidator', () => {
             },
             errorHash: {
               InvalidLimit: 'error-ctor-invalid-limit',
+              ExcessiveLimit: 'error-ctor-excessive-limit',
               InvalidOffset: 'error-ctor-invalid-offset',
             },
           },
@@ -174,6 +189,7 @@ describe('ExpensesInputValidator', () => {
             },
             errorHash: {
               InvalidLimit: 'error-ctor-invalid-limit',
+              ExcessiveLimit: 'error-ctor-excessive-limit',
               InvalidOffset: 'error-ctor-invalid-offset',
             },
           },
@@ -213,6 +229,7 @@ describe('ExpensesInputValidator', () => {
             },
             errorHash: {
               InvalidLimit: 'error-ctor-invalid-limit',
+              ExcessiveLimit: 'error-ctor-excessive-limit',
               InvalidOffset: 'error-ctor-invalid-offset',
             },
           },
@@ -227,6 +244,7 @@ describe('ExpensesInputValidator', () => {
             },
             errorHash: {
               InvalidLimit: 'error-ctor-invalid-limit',
+              ExcessiveLimit: 'error-ctor-excessive-limit',
               InvalidOffset: 'error-ctor-invalid-offset',
             },
           },
@@ -241,6 +259,7 @@ describe('ExpensesInputValidator', () => {
             },
             errorHash: {
               InvalidLimit: 'error-ctor-invalid-limit',
+              ExcessiveLimit: 'error-ctor-excessive-limit',
               InvalidOffset: 'error-ctor-invalid-offset',
             },
           },
@@ -255,6 +274,7 @@ describe('ExpensesInputValidator', () => {
             },
             errorHash: {
               InvalidLimit: 'error-ctor-invalid-limit',
+              ExcessiveLimit: 'error-ctor-excessive-limit',
               InvalidOffset: 'error-ctor-invalid-offset',
             },
           },
@@ -266,6 +286,7 @@ describe('ExpensesInputValidator', () => {
             },
             errorHash: {
               InvalidLimit: 'error-ctor-invalid-limit',
+              ExcessiveLimit: 'error-ctor-excessive-limit',
               InvalidOffset: 'error-ctor-invalid-offset',
             },
           },
@@ -300,6 +321,7 @@ describe('ExpensesInputValidator', () => {
             },
             errorHash: {
               InvalidLimit: 'error-ctor-invalid-limit',
+              ExcessiveLimit: 'error-ctor-excessive-limit',
               InvalidOffset: 'error-ctor-invalid-offset',
             },
           },
@@ -317,6 +339,7 @@ describe('ExpensesInputValidator', () => {
             },
             errorHash: {
               InvalidLimit: 'error-ctor-invalid-limit',
+              ExcessiveLimit: 'error-ctor-excessive-limit',
               InvalidOffset: 'error-ctor-invalid-offset',
             },
           },
@@ -355,6 +378,7 @@ describe('ExpensesInputValidator', () => {
             },
             errorHash: {
               InvalidLimit: 'error-ctor-invalid-limit',
+              ExcessiveLimit: 'error-ctor-excessive-limit',
               InvalidOffset: 'error-ctor-invalid-offset',
             },
           },
@@ -369,6 +393,7 @@ describe('ExpensesInputValidator', () => {
             },
             errorHash: {
               InvalidLimit: 'error-ctor-invalid-limit',
+              ExcessiveLimit: 'error-ctor-excessive-limit',
               InvalidOffset: 'error-ctor-invalid-offset',
             },
           },
@@ -408,6 +433,7 @@ describe('ExpensesInputValidator', () => {
             },
             errorHash: {
               InvalidLimit: 'error-ctor-invalid-limit',
+              ExcessiveLimit: 'error-ctor-excessive-limit',
               InvalidOffset: 'error-ctor-invalid-offset',
             },
           },
@@ -422,6 +448,7 @@ describe('ExpensesInputValidator', () => {
             },
             errorHash: {
               InvalidLimit: 'error-ctor-invalid-limit',
+              ExcessiveLimit: 'error-ctor-excessive-limit',
               InvalidOffset: 'error-ctor-invalid-offset',
             },
           },
@@ -436,6 +463,7 @@ describe('ExpensesInputValidator', () => {
             },
             errorHash: {
               InvalidLimit: 'error-ctor-invalid-limit',
+              ExcessiveLimit: 'error-ctor-excessive-limit',
               InvalidOffset: 'error-ctor-invalid-offset',
             },
           },
@@ -450,6 +478,7 @@ describe('ExpensesInputValidator', () => {
             },
             errorHash: {
               InvalidLimit: 'error-ctor-invalid-limit',
+              ExcessiveLimit: 'error-ctor-excessive-limit',
               InvalidOffset: 'error-ctor-invalid-offset',
             },
           },
@@ -489,6 +518,7 @@ describe('ExpensesInputValidator', () => {
             },
             errorHash: {
               InvalidLimit: 'error-ctor-invalid-limit',
+              ExcessiveLimit: 'error-ctor-excessive-limit',
               InvalidOffset: 'error-ctor-invalid-offset',
             },
           },
@@ -503,6 +533,7 @@ describe('ExpensesInputValidator', () => {
             },
             errorHash: {
               InvalidLimit: 'error-ctor-invalid-limit',
+              ExcessiveLimit: 'error-ctor-excessive-limit',
               InvalidOffset: 'error-ctor-invalid-offset',
             },
           },
@@ -517,6 +548,7 @@ describe('ExpensesInputValidator', () => {
             },
             errorHash: {
               InvalidLimit: 'error-ctor-invalid-limit',
+              ExcessiveLimit: 'error-ctor-excessive-limit',
               InvalidOffset: 'error-ctor-invalid-offset',
             },
           },
@@ -531,6 +563,7 @@ describe('ExpensesInputValidator', () => {
             },
             errorHash: {
               InvalidLimit: 'error-ctor-invalid-limit',
+              ExcessiveLimit: 'error-ctor-excessive-limit',
               InvalidOffset: 'error-ctor-invalid-offset',
             },
           },
@@ -565,6 +598,7 @@ describe('ExpensesInputValidator', () => {
             },
             errorHash: {
               InvalidLimit: 'error-ctor-invalid-limit',
+              ExcessiveLimit: 'error-ctor-excessive-limit',
               InvalidOffset: 'error-ctor-invalid-offset',
             },
           },
@@ -582,6 +616,7 @@ describe('ExpensesInputValidator', () => {
             },
             errorHash: {
               InvalidLimit: 'error-ctor-invalid-limit',
+              ExcessiveLimit: 'error-ctor-excessive-limit',
               InvalidOffset: 'error-ctor-invalid-offset',
             },
           },
@@ -620,6 +655,7 @@ describe('ExpensesInputValidator', () => {
             },
             errorHash: {
               InvalidLimit: 'error-ctor-invalid-limit',
+              ExcessiveLimit: 'error-ctor-excessive-limit',
               InvalidOffset: 'error-ctor-invalid-offset',
             },
           },
@@ -634,6 +670,7 @@ describe('ExpensesInputValidator', () => {
             },
             errorHash: {
               InvalidLimit: 'error-ctor-invalid-limit',
+              ExcessiveLimit: 'error-ctor-excessive-limit',
               InvalidOffset: 'error-ctor-invalid-offset',
             },
           },
@@ -773,6 +810,140 @@ describe('ExpensesInputValidator', () => {
 
         expect(actual)
           .toBeNull()
+      })
+    })
+  })
+})
+
+describe('ExpensesInputValidator', () => {
+  describe('#isWithinMaximumLimit()', () => {
+    /*
+     * Q50's cap. The maximum is `PAGINATION.MAXIMUM_LIMIT` in `constants/paginationConstants.cjs`,
+     * chosen at 100 and not yet confirmed by the user -- so the literal below is deliberately
+     * written out rather than read from the constant. A test that read the value under test would
+     * assert nothing, and would go on passing if somebody changed the cap by accident.
+     *
+     * The boundary is the point: 100 is served and 101 is not.
+     */
+    describe('when the presented limit is no larger than the maximum', () => {
+      const cases = [
+        {
+          factoryParams: {
+            input: {
+              pagination: {
+                limit: 1,
+                offset: 0,
+              },
+            },
+            errorHash: {
+              InvalidLimit: 'error-ctor-invalid-limit',
+              ExcessiveLimit: 'error-ctor-excessive-limit',
+              InvalidOffset: 'error-ctor-invalid-offset',
+            },
+          },
+        },
+        {
+          factoryParams: {
+            input: {
+              pagination: {
+                limit: 99,
+                offset: 0,
+              },
+            },
+            errorHash: {
+              InvalidLimit: 'error-ctor-invalid-limit',
+              ExcessiveLimit: 'error-ctor-excessive-limit',
+              InvalidOffset: 'error-ctor-invalid-offset',
+            },
+          },
+        },
+        {
+          factoryParams: {
+            input: {
+              pagination: {
+                limit: 100,
+                offset: 0,
+              },
+            },
+            errorHash: {
+              InvalidLimit: 'error-ctor-invalid-limit',
+              ExcessiveLimit: 'error-ctor-excessive-limit',
+              InvalidOffset: 'error-ctor-invalid-offset',
+            },
+          },
+        },
+      ]
+
+      test.each(cases)('pagination.limit: $factoryParams.input.pagination.limit', ({
+        factoryParams,
+      }) => {
+        const validator = ExpensesInputValidator.create(factoryParams)
+
+        const actual = validator.isWithinMaximumLimit()
+
+        expect(actual)
+          .toBeTruthy()
+      })
+    })
+
+    describe('when the presented limit is larger than the maximum', () => {
+      const cases = [
+        {
+          factoryParams: {
+            input: {
+              pagination: {
+                limit: 101,
+                offset: 0,
+              },
+            },
+            errorHash: {
+              InvalidLimit: 'error-ctor-invalid-limit',
+              ExcessiveLimit: 'error-ctor-excessive-limit',
+              InvalidOffset: 'error-ctor-invalid-offset',
+            },
+          },
+        },
+        {
+          factoryParams: {
+            input: {
+              pagination: {
+                limit: 500,
+                offset: 0,
+              },
+            },
+            errorHash: {
+              InvalidLimit: 'error-ctor-invalid-limit',
+              ExcessiveLimit: 'error-ctor-excessive-limit',
+              InvalidOffset: 'error-ctor-invalid-offset',
+            },
+          },
+        },
+        {
+          factoryParams: {
+            input: {
+              pagination: {
+                limit: 100000,
+                offset: 0,
+              },
+            },
+            errorHash: {
+              InvalidLimit: 'error-ctor-invalid-limit',
+              ExcessiveLimit: 'error-ctor-excessive-limit',
+              InvalidOffset: 'error-ctor-invalid-offset',
+            },
+          },
+        },
+      ]
+
+      test.each(cases)('pagination.limit: $factoryParams.input.pagination.limit', ({
+        factoryParams,
+      }) => {
+        const validator = ExpensesInputValidator.create(factoryParams)
+
+        const actual = validator.isWithinMaximumLimit()
+
+        expect(actual)
+          .toBeFalsy()
       })
     })
   })

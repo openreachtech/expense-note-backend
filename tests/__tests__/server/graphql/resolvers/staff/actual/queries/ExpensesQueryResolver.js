@@ -65,11 +65,16 @@ describe('ExpensesQueryResolver', () => {
      * frontend reads the code, not the message. The two `203` names are the ones
      * `ExpensesInputValidator` reads off `this.errorHash`, so a rename here would refuse nothing
      * and throw on an undefined constructor instead.
+     *
+     * `ExcessiveLimit` is Q50's cap. It is pinned here like the rest, and the rule it belongs to
+     * is the THIRD entry rather than the second -- see the validator's own test for why the order
+     * is part of the contract.
      */
     test('to be fixed value', () => {
       const expected = {
         InvalidLimit: '203.Q002.001',
         InvalidOffset: '203.Q002.002',
+        ExcessiveLimit: '203.Q002.003',
         StaffMemberNotFound: '204.Q002.001',
       }
 
