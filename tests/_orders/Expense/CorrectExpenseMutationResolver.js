@@ -1846,3 +1846,159 @@ describe('CorrectExpenseMutationResolver', () => {
     })
   })
 })
+
+describe('CorrectExpenseMutationResolver', () => {
+  describe('#resolve()', () => {
+    /*
+     * The operation refuses with `204.M005.001` when the context carries no member of staff, and
+     * refuses it **before it reads or rewrites anything**.
+     *
+     * The engine is where a tokenless caller is really stopped — `correctExpense` is absent from
+     * `StaffGraphqlServerEngine#get:schemasToSkipFiltering`, so the authentication filter refuses
+     * one before `#resolve()` is entered. What is asserted here is the resolver's own second line,
+     * for the case where that hand-maintained list is wrong: unguarded, a misconfiguration would
+     * rewrite a row on behalf of nobody.
+     * `tests/__tests__/server/graphql/resolvers/staff/actual/queries/ExpensesQueryResolver.js`
+     * carries the same describe for `expenses`, and this one follows its shape.
+     *
+     * The cases differ in how the context fails to name a member of staff, and in what was asked
+     * for: a correction nothing else is wrong with, two no correction could be made of, one naming
+     * an entry that is somebody else's, and one naming a category no row holds. **The session code
+     * comes back in every one of them**, which is what pins the ordering rather than merely the
+     * existence of the branch — a later refactoring that validated the input first, or that read
+     * the entry first, would answer `203.M005.*` or `204.M005.002` here and change what a caller
+     * with no session is told about what they sent.
+     *
+     * Every call below is refused before a transaction is opened, so no row is rewritten and the
+     * allocation stated at the head of this file is untouched: the entries named are ones this
+     * file deliberately never corrects (`10200006`, `10200008`, `10200010`) and one of
+     * `10110002`'s, which no case here corrects either.
+     */
+    describe('when the context carries no member of staff', () => {
+      const cases = [
+        {
+          params: {
+            context: {
+              staffMemberId: null,
+              now: new Date('2026-09-15T01:00:00.000Z'),
+            },
+            input: {
+              expenseId: 10200006,
+              spentOn: '2026-09-10',
+              amount: 1300,
+              expenseCategoryId: 10000001,
+              memo: 'a correction presented with no session',
+            },
+          },
+          label: 'staffMemberId null, with a correction nothing else is wrong with',
+          expected: '204.M005.001',
+        },
+        {
+          params: {
+            context: {
+              // staffMemberId: undefined -- no member of staff was resolved at all
+              staffMember: null,
+              now: new Date('2026-09-15T01:00:00.000Z'),
+            },
+            input: {
+              expenseId: 10200008,
+              spentOn: '2026-09-09',
+              amount: 3500,
+              expenseCategoryId: 10000002,
+              memo: 'another correction presented with no session',
+            },
+          },
+          label: 'staffMemberId absent from a context carrying the rest',
+          expected: '204.M005.001',
+        },
+        {
+          params: {
+            context: {
+              staffMemberId: null,
+              now: new Date('2026-09-15T01:00:00.000Z'),
+            },
+            input: {
+              // expenseId: undefined -- no entry named at all
+              spentOn: '2026-09-08',
+              amount: 4600,
+              expenseCategoryId: 10000003,
+              memo: 'a correction naming no entry, with no session',
+            },
+          },
+          label: 'staffMemberId null, with no entry named at all',
+          expected: '204.M005.001',
+        },
+        {
+          params: {
+            context: {
+              staffMemberId: null,
+              now: new Date('2026-09-15T01:00:00.000Z'),
+            },
+            input: {
+              expenseId: 10200010,
+              spentOn: '2026-09-07',
+              amount: 0,
+              expenseCategoryId: 10000004,
+              memo: 'an amount no correction could be made of, with no session',
+            },
+          },
+          label: 'staffMemberId null, with an amount of zero',
+          expected: '204.M005.001',
+        },
+        {
+          params: {
+            context: {
+              staffMemberId: null,
+              now: new Date('2026-09-15T01:00:00.000Z'),
+            },
+            input: {
+              expenseId: 10200011,
+              spentOn: '2026-09-06',
+              amount: 7900,
+              expenseCategoryId: 10000001,
+              memo: 'another member of staff entry, with no session',
+            },
+          },
+          label: 'staffMemberId null, naming another member of staff entry',
+          expected: '204.M005.001',
+        },
+        {
+          params: {
+            context: {
+              staffMemberId: null,
+              now: new Date('2026-09-15T01:00:00.000Z'),
+            },
+            input: {
+              expenseId: 10200006,
+              spentOn: '2026-09-05',
+              amount: 8100,
+              expenseCategoryId: 10009992,
+              memo: 'a category no row holds, with no session',
+            },
+          },
+          label: 'staffMemberId null, naming a category no row holds',
+          expected: '204.M005.001',
+        },
+      ]
+
+      test.each(cases)('label: $label', async ({
+        params,
+        expected,
+      }) => {
+        const resolver = CorrectExpenseMutationResolver.create()
+        const resolveArgs = {
+          variables: {
+            input: params.input,
+          },
+          context: params.context,
+        }
+
+        const actual = () => resolver.resolve(/** @type {*} */ (resolveArgs))
+
+        await expect(actual)
+          .rejects
+          .toThrow(expected)
+      })
+    })
+  })
+})

@@ -1407,3 +1407,135 @@ describe('RecordExpenseMutationResolver', () => {
     })
   })
 })
+
+describe('RecordExpenseMutationResolver', () => {
+  describe('#resolve()', () => {
+    /*
+     * The operation refuses with `204.M004.001` when the context carries no member of staff, and
+     * refuses it **before it reads or writes anything**.
+     *
+     * The engine is where a tokenless caller is really stopped — `recordExpense` is absent from
+     * `StaffGraphqlServerEngine#get:schemasToSkipFiltering`, so the authentication filter refuses
+     * one before `#resolve()` is entered. What is asserted here is the resolver's own second line,
+     * for the case where that hand-maintained list is wrong: unguarded, a misconfiguration would
+     * write a row owned by nobody.
+     * `tests/__tests__/server/graphql/resolvers/staff/actual/queries/ExpensesQueryResolver.js`
+     * carries the same describe for `expenses`, and this one follows its shape.
+     *
+     * The cases differ in how the context fails to name a member of staff, and in what was asked
+     * for: an entry nothing else is wrong with, two an expense could not be made of, and one
+     * naming a category no row holds. **The session code comes back in every one of them**, which
+     * is what pins the ordering rather than merely the existence of the branch — a later
+     * refactoring that validated the input first, or that read the category first, would answer
+     * `203.M004.*` or `204.M004.002` here and change what a caller with no session is told about
+     * what they sent.
+     *
+     * Every call below is refused before a transaction is opened, so this describe writes no row
+     * and consumes none of the allocation stated at the head of this file.
+     */
+    describe('when the context carries no member of staff', () => {
+      const cases = [
+        {
+          params: {
+            context: {
+              staffMemberId: null,
+              now: new Date('2026-09-15T01:00:00.000Z'),
+            },
+            input: {
+              spentOn: '2026-09-10',
+              amount: 1200,
+              expenseCategoryId: 10000001,
+              memo: 'a train fare presented with no session',
+            },
+          },
+          label: 'staffMemberId null, with an entry nothing else is wrong with',
+          expected: '204.M004.001',
+        },
+        {
+          params: {
+            context: {
+              // staffMemberId: undefined -- no member of staff was resolved at all
+              staffMember: null,
+              now: new Date('2026-09-15T01:00:00.000Z'),
+            },
+            input: {
+              spentOn: '2026-09-09',
+              amount: 3400,
+              expenseCategoryId: 10000002,
+              memo: 'a lunch presented with no session',
+            },
+          },
+          label: 'staffMemberId absent from a context carrying the rest',
+          expected: '204.M004.001',
+        },
+        {
+          params: {
+            context: {
+              staffMemberId: null,
+              now: new Date('2026-09-15T01:00:00.000Z'),
+            },
+            input: {
+              spentOn: '2026-09-08',
+              amount: 0,
+              expenseCategoryId: 10000003,
+              memo: 'an amount no expense could be made of, with no session',
+            },
+          },
+          label: 'staffMemberId null, with an amount of zero',
+          expected: '204.M004.001',
+        },
+        {
+          params: {
+            context: {
+              staffMemberId: null,
+              now: new Date('2026-09-15T01:00:00.000Z'),
+            },
+            input: {
+              spentOn: '2026-09-16',
+              amount: 5600,
+              expenseCategoryId: 10000004,
+              memo: 'an entry dated after today, with no session',
+            },
+          },
+          label: 'staffMemberId null, with an entry dated after today',
+          expected: '204.M004.001',
+        },
+        {
+          params: {
+            context: {
+              staffMemberId: null,
+              now: new Date('2026-09-15T01:00:00.000Z'),
+            },
+            input: {
+              spentOn: '2026-09-07',
+              amount: 7800,
+              expenseCategoryId: 10009992,
+              memo: 'a category no row holds, with no session',
+            },
+          },
+          label: 'staffMemberId null, naming a category no row holds',
+          expected: '204.M004.001',
+        },
+      ]
+
+      test.each(cases)('label: $label', async ({
+        params,
+        expected,
+      }) => {
+        const resolver = RecordExpenseMutationResolver.create()
+        const resolveArgs = {
+          variables: {
+            input: params.input,
+          },
+          context: params.context,
+        }
+
+        const actual = () => resolver.resolve(/** @type {*} */ (resolveArgs))
+
+        await expect(actual)
+          .rejects
+          .toThrow(expected)
+      })
+    })
+  })
+})

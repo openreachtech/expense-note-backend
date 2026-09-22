@@ -34,8 +34,20 @@ const {
  * authentication filter refuses a tokenless caller before `resolve()` is entered — which is what
  * section 11's "refused without a session, before it reads anything" asks for. The null guard below
  * is the second line and defence in depth only, for the case where that hand-maintained list is
- * wrong; `ExpensesQueryResolver` carries the same shape for the same reason. Unguarded, a
- * misconfiguration would write a row owned by nobody.
+ * wrong; `ExpensesQueryResolver` carries the same shape for the same reason.
+ *
+ * **What the guard actually prevents is a raw driver error reaching the caller — not an unowned
+ * row.** An earlier draft of this comment said that unguarded, a misconfiguration would write a row
+ * owned by nobody. That was wrong, and it was measured rather than reasoned: with the guard
+ * disabled, the insert fails at the column, because `StaffMemberId` is `allowNull: false` in the
+ * create-table migration. **`Expense.verifyStaffMember()` is not what stops it** — that hook
+ * returns early on a null owner (`if (staffMemberId === null) { return }`), so it is a no-op for
+ * exactly this case. What the caller receives without the guard is
+ * `notNull Violation: Expense.StaffMemberId cannot be null`, a Sequelize message crossing the
+ * transport in place of an error code. A context whose `staffMemberId` key is absent rather than
+ * null is worse still in the two operations that read before writing: `undefined` reaches a `where`
+ * clause and Sequelize answers `WHERE parameter "staff_member_id" has invalid "undefined" value`.
+ * The guard catches both spellings, and that — not the row — is the leak it closes.
  *
  * -------------------------------------------------------------------------------------------
  * What it answers with, and what it deliberately does not

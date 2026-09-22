@@ -1201,3 +1201,118 @@ describe('RemoveExpenseMutationResolver', () => {
     })
   })
 })
+
+describe('RemoveExpenseMutationResolver', () => {
+  describe('#resolve()', () => {
+    /*
+     * The operation refuses with `204.M006.001` when the context carries no member of staff, and
+     * refuses it **before it reads or removes anything**.
+     *
+     * The engine is where a tokenless caller is really stopped — `removeExpense` is absent from
+     * `StaffGraphqlServerEngine#get:schemasToSkipFiltering`, so the authentication filter refuses
+     * one before `#resolve()` is entered. What is asserted here is the resolver's own second line,
+     * for the case where that hand-maintained list is wrong: unguarded, a misconfiguration would
+     * delete a row on behalf of nobody.
+     * `tests/__tests__/server/graphql/resolvers/staff/actual/queries/ExpensesQueryResolver.js`
+     * carries the same describe for `expenses`, and this one follows its shape.
+     *
+     * The cases differ in how the context fails to name a member of staff, and in what was asked
+     * for: a removal nothing else is wrong with, two no removal could be made of, and one naming
+     * an entry that is somebody else's. **The session code comes back in every one of them**,
+     * which is what pins the ordering rather than merely the existence of the branch — a later
+     * refactoring that validated the input first, or that read the entry first, would answer
+     * `203.M006.*` or `204.M006.002` here and change what a caller with no session is told about
+     * what they sent.
+     *
+     * Every call below is refused before a transaction is opened, so no row is deleted and the
+     * allocation stated at the head of this file is untouched: the entries named are `10200006`
+     * and `10200008`, which this file deliberately never removes, and one of `10110002`'s, which
+     * no case here removes either.
+     */
+    describe('when the context carries no member of staff', () => {
+      const cases = [
+        {
+          params: {
+            context: {
+              staffMemberId: null,
+            },
+            input: {
+              expenseId: 10200006,
+            },
+          },
+          label: 'staffMemberId null, with a removal nothing else is wrong with',
+          expected: '204.M006.001',
+        },
+        {
+          params: {
+            context: {
+              // staffMemberId: undefined -- no member of staff was resolved at all
+              staffMember: null,
+              now: new Date('2026-09-15T01:00:00.000Z'),
+            },
+            input: {
+              expenseId: 10200008,
+            },
+          },
+          label: 'staffMemberId absent from a context carrying the rest',
+          expected: '204.M006.001',
+        },
+        {
+          params: {
+            context: {
+              staffMemberId: null,
+            },
+            input: {
+              // expenseId: undefined -- no entry named at all
+            },
+          },
+          label: 'staffMemberId null, with no entry named at all',
+          expected: '204.M006.001',
+        },
+        {
+          params: {
+            context: {
+              staffMemberId: null,
+            },
+            input: {
+              expenseId: 0,
+            },
+          },
+          label: 'staffMemberId null, with an entry no identifier could name',
+          expected: '204.M006.001',
+        },
+        {
+          params: {
+            context: {
+              staffMemberId: null,
+            },
+            input: {
+              expenseId: 10200011,
+            },
+          },
+          label: 'staffMemberId null, naming another member of staff entry',
+          expected: '204.M006.001',
+        },
+      ]
+
+      test.each(cases)('label: $label', async ({
+        params,
+        expected,
+      }) => {
+        const resolver = RemoveExpenseMutationResolver.create()
+        const resolveArgs = {
+          variables: {
+            input: params.input,
+          },
+          context: params.context,
+        }
+
+        const actual = () => resolver.resolve(/** @type {*} */ (resolveArgs))
+
+        await expect(actual)
+          .rejects
+          .toThrow(expected)
+      })
+    })
+  })
+})
