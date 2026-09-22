@@ -31,31 +31,31 @@ import StaffGraphqlContext from '../../../../../../../server/graphql/contexts/St
  * therefore does not evidence is the socket itself** — the express app, the middleware, the JSON
  * body parser and the CORS allow-list are not exercised here, and will not be until Q24 is closed.
  *
- * **Two of the five are still stubs; the two queries and `recordExpense` are not, as of
- * checkpoint 7.** `expenses`, `expenseCategories` and `recordExpense` all have an `actual/`
- * resolver now, and renchan resolves a field from the actual pool before the stub pool
- * (`actualResolverSchemaHash[schema] ?? stubResolverSchemaHash[schema]`), so those three fields of
- * this schema are wired to the real resolvers. All three stub classes are still there and still
+ * **One of the five is still a stub; the two queries, `recordExpense` and `correctExpense` are
+ * not.** Those four all have an `actual/` resolver now, and renchan resolves a field from the
+ * actual pool before the stub pool
+ * (`actualResolverSchemaHash[schema] ?? stubResolverSchemaHash[schema]`), so those four fields of
+ * this schema are wired to the real resolvers. All four stub classes are still there and still
  * tested beside this file, because the frontend builds against them until checkpoint 16 — they are
- * simply no longer what a caller reaches through the schema. The two remaining mutations —
- * `correctExpense` and `removeExpense` — are still served from the stub pool.
+ * simply no longer what a caller reaches through the schema. The one remaining mutation —
+ * `removeExpense` — is still served from the stub pool.
  *
- * **`contextValue` is therefore null for the two that remain stubbed, and a real session-less
- * context for the three that do not.** renchan builds its authentication filter hash from the
+ * **`contextValue` is therefore null for the one that remains stubbed, and a real session-less
+ * context for the four that do not.** renchan builds its authentication filter hash from the
  * `actual/` pool alone, so a stub-only field is handed `filter === undefined` and nothing refuses
  * the call: passing no context at all is the plainest demonstration of it, since there is not even
- * an object a session could have been read off and the operation answers anyway. **So for those
- * two this file evidences that they are callable, and simultaneously that they are callable by
- * anybody** — which spec section 7's Authentication row and section 11's own criterion say they
- * must not be. That criterion is not met for them at this checkpoint and cannot be; it is their
- * own `actual/` resolvers that will meet it.
+ * an object a session could have been read off and the operation answers anyway. **So for that one
+ * this file evidences that it is callable, and simultaneously that it is callable by anybody** —
+ * which spec section 7's Authentication row and section 11's own criterion say it must not be.
+ * That criterion is not met for it at this checkpoint and cannot be; it is its own `actual/`
+ * resolver that will meet it.
  *
- * **For `expenses`, `expenseCategories` and `recordExpense` the same criterion is met, and the
- * first six blocks below are where that is shown.** A context is built the way the framework
- * builds one — `StaffGraphqlContext.createAsync()` over a request carrying no access-token
- * header — so the refusal that comes back is the engine's real `102.X000.001`, raised before the
- * resolver is entered, rather than an artifact of handing the filter a null to read `canResolve`
- * off.
+ * **For `expenses`, `expenseCategories`, `recordExpense` and `correctExpense` the same criterion is
+ * met, and the first eight blocks below are where that is shown.** A context is built the way the
+ * framework builds one — `StaffGraphqlContext.createAsync()` over a request carrying no
+ * access-token header — so the refusal that comes back is the engine's real `102.X000.001`, raised
+ * before the resolver is entered, rather than an artifact of handing the filter a null to read
+ * `canResolve` off.
  *
  * What each case asserts is the response's payload. An operation the filter refused, or one no
  * resolver was wired to, comes back with that payload null and an error beside it, so neither can
@@ -70,7 +70,7 @@ import StaffGraphqlContext from '../../../../../../../server/graphql/contexts/St
  *
  * **No `DateTime` value crosses the schema here any more.** The only fields that carried one were
  * `createdAt` and `updatedAt` on `expenses`, and that operation is now refused rather than
- * answered; the two mutations still served from the stub pool answer an `Int!` identifier and
+ * answered; the one mutation still served from the stub pool answers an `Int!` identifier and
  * nothing else. The scalar's own serialization is exercised where those fields are actually read,
  * beside the `actual/` resolver that reads them.
  */
@@ -432,7 +432,7 @@ describe('execute-expense-stub-operations', () => {
    * Recording an entry, asked for through the schema by a caller holding no session.
    *
    * **It is refused, and that is section 11's criterion rather than a regression.** Until
-   * checkpoint 7 this same request was answered — to anybody, with the stub's canned
+   * checkpoint 6 this same request was answered — to anybody, with the stub's canned
    * `expenseId` — because the operation existed only in the stub pool, which renchan's filter
    * hash is not built from. Its `actual/` resolver now exists and `recordExpense` is deliberately
    * absent from `StaffGraphqlServerEngine#get:schemasToSkipFiltering`, which names only `signIn`,
@@ -616,14 +616,30 @@ describe('execute-expense-stub-operations', () => {
 
 describe('execute-expense-stub-operations', () => {
   /*
-   * Correcting an entry, through the schema. The identifier presented comes back, so the two cases
-   * name different ones and the answer has to move with them.
+   * Correcting an entry, asked for through the schema by a caller holding no session.
    *
-   * The second names an entry `expenses` does not answer with — which stands for both somebody
-   * else's entry and an entry already removed, the two having been settled as one answer — and it
-   * is corrected just the same. The real operation answers not found; a stub throws nothing.
+   * **It is refused, and that is section 11's criterion rather than a regression.** Until this
+   * checkpoint this same request was answered — to anybody, with the stub's echoed `expenseId` —
+   * because the operation existed only in the stub pool, which renchan's filter hash is not built
+   * from. Its `actual/` resolver now exists and `correctExpense` is deliberately absent from
+   * `StaffGraphqlServerEngine#get:schemasToSkipFiltering`, which names only `signIn`, `signOut` and
+   * `renewAccessToken`, so the authentication filter runs and refuses before a resolver is reached.
+   * **A refused mutation writes nothing**: no `expenses` row is rewritten here, because nothing
+   * downstream of the filter runs at all.
+   *
+   * What each case asserts is the error the refusal carries: `102.X000.001` is the engine's
+   * `Unauthenticated`, declared in `StaffGraphqlServerEngine.standardErrorCodeHash`. It names no
+   * member of staff, no row and no count.
+   *
+   * **The second case names an entry no row holds**, which the real operation refuses on its own
+   * under `204.M005.002` — the one answer it gives both for an entry nobody holds and for an entry
+   * somebody else holds. It comes back refused for want of a session instead, the engine's code
+   * rather than the resolver's, which is "refused without a session, **before it reads anything**"
+   * being a property of the wiring rather than of the resolver's own order of work. **Nothing here
+   * therefore reveals whether that entry exists**, which is the same property the resolver's own
+   * tests assert one layer down.
    */
-  describe('should answer the correctExpense mutation through the built schema, with no session presented', () => {
+  describe('should refuse the correctExpense mutation through the built schema, with no session presented', () => {
     const cases = [
       {
         params: {
@@ -642,11 +658,11 @@ describe('execute-expense-stub-operations', () => {
             memo: 'Team dinner after the release',
           },
         },
-        expected: {
-          correctExpense: {
-            expenseId: 9105,
-          },
-        },
+        expected: [
+          expect.objectContaining({
+            message: '102.X000.001',
+          }),
+        ],
       },
       {
         params: {
@@ -665,11 +681,11 @@ describe('execute-expense-stub-operations', () => {
             // memo: undefined
           },
         },
-        expected: {
-          correctExpense: {
-            expenseId: 7788,
-          },
-        },
+        expected: [
+          expect.objectContaining({
+            message: '102.X000.001',
+          }),
+        ],
       },
     ]
 
@@ -682,6 +698,13 @@ describe('execute-expense-stub-operations', () => {
         engine,
       })
       const schema = await schemaBuilder.buildSchema()
+      const context = await StaffGraphqlContext.createAsync({
+        expressRequest: /** @type {*} */ ({
+          headers: {}, // no access token: a caller holding no session
+        }),
+        requestParams: {},
+        engine,
+      })
 
       const response = await graphql({
         schema,
@@ -689,13 +712,98 @@ describe('execute-expense-stub-operations', () => {
         variableValues: {
           input: params.input,
         },
-        contextValue: null, // no session, and not even a context to have read one off
+        contextValue: context,
+      })
+
+      const actual = response.errors
+
+      expect(actual)
+        .toEqual(expected)
+    })
+  })
+})
+
+describe('execute-expense-stub-operations', () => {
+  /*
+   * The same refusal, seen from the payload side: a refused mutation answers with nothing at all,
+   * and in particular with no `expenseId` — so nothing a caller could mistake for an entry they had
+   * just corrected comes back, and nothing that would tell them the entry was there to correct.
+   *
+   * It is asserted apart from the error above rather than beside it, because a null result is its
+   * own case. The payload is pulled off the response and asserted on its own, rather than the whole
+   * response being compared in one go, because `data` is a denylisted identifier and may not be
+   * written as a key — `tests/_orders/SignIn/execute-staff-session-operations.js` reads it the same
+   * way for the same reason.
+   */
+  describe('when the correctExpense mutation is refused for want of a session', () => {
+    const cases = [
+      {
+        params: {
+          source: `
+            mutation ($input: CorrectExpenseInput!) {
+              correctExpense (input: $input) {
+                expenseId
+              }
+            }
+          `,
+          input: {
+            expenseId: 9106,
+            spentOn: '2026-09-04',
+            amount: 880,
+            expenseCategoryId: 10000001,
+            memo: 'Bus fare back from the depot',
+          },
+        },
+      },
+      {
+        params: {
+          source: `
+            mutation ($input: CorrectExpenseInput!) {
+              correctExpense (input: $input) {
+                expenseId
+              }
+            }
+          `,
+          input: {
+            expenseId: 7789,
+            spentOn: '2026-07-18',
+            amount: 2175,
+            expenseCategoryId: 10000004,
+            // memo: undefined -- which the real operation would read as clearing the memo
+          },
+        },
+      },
+    ]
+
+    test.each(cases)('input.expenseId: $params.input.expenseId', async ({
+      params,
+    }) => {
+      const engine = await StaffGraphqlServerEngine.createAsync()
+      const schemaBuilder = GraphqlSchemaBuilder.create({
+        engine,
+      })
+      const schema = await schemaBuilder.buildSchema()
+      const context = await StaffGraphqlContext.createAsync({
+        expressRequest: /** @type {*} */ ({
+          headers: {}, // no access token: a caller holding no session
+        }),
+        requestParams: {},
+        engine,
+      })
+
+      const response = await graphql({
+        schema,
+        source: params.source,
+        variableValues: {
+          input: params.input,
+        },
+        contextValue: context,
       })
 
       const actual = response.data
 
       expect(actual)
-        .toEqual(expected)
+        .toBeNull()
     })
   })
 })
