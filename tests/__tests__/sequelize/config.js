@@ -81,3 +81,30 @@ describe('config.cjs', () => {
     })
   })
 })
+
+describe('config.cjs', () => {
+  describe('should keep the suite off the canonical database file', () => {
+    /*
+     * SQLite serializes writers across a whole database file, and jest runs its suites in parallel
+     * processes. Pointed at one shared file, `--maxWorkers=3` made three writers contend for one
+     * lock -- `SQLITE_BUSY: database is locked` -- and let each worker read rows another had just
+     * inserted, so the same commit failed 1, 12, 16 and 23 tests on successive runs.
+     *
+     * Every worker is therefore handed its own copy, which is what this asserts: the file the suite
+     * opens is never the canonical one. A change that dropped the wiring would put the suite back on
+     * the shared file and be caught here rather than by a flake weeks later.
+     *
+     * The literal is written out rather than read from `constants/databaseStorageConstants.cjs`,
+     * deliberately -- a test comparing a value against the constant it came from asserts nothing.
+     */
+    test('to name a per-worker copy while jest is running', () => {
+      const expected = 'sequelize/storage/development.sqlite3'
+
+      const actual = config.development.storage
+
+      expect(actual)
+        .not
+        .toBe(expected)
+    })
+  })
+})

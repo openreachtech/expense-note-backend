@@ -2,6 +2,26 @@
 
 const env = require('../app/globals/env.cjs')
 
+const DATABASE_STORAGE_CONSTANT_HASH = require('../constants/databaseStorageConstants.cjs')
+const JestWorkerStorage = require('./tools/JestWorkerStorage.cjs')
+
+const {
+  DATABASE_STORAGE,
+} = DATABASE_STORAGE_CONSTANT_HASH
+
+/*
+ * `development.storage` is the canonical file everywhere except inside a jest worker, where it is
+ * that worker's own copy of it. SQLite has one writer per database file and jest runs its suites in
+ * parallel processes, so a shared file put three workers on one lock and let each of them read the
+ * others' rows. `sequelize/tools/JestWorkerStorage.cjs` carries the whole account.
+ *
+ * Nothing but jest is affected: `JEST_WORKER_ID` is set in a jest worker process and nowhere else,
+ * so `npm run db:refresh`, the `db:*` scripts and the server keep opening the canonical file.
+ */
+const developmentStorage = JestWorkerStorage.create({
+  canonicalStoragePath: DATABASE_STORAGE.DEVELOPMENT_PATH,
+})
+
 /*
  * `logging` is set on EVERY environment, deliberately, and it must stay set.
  *
@@ -34,7 +54,7 @@ module.exports = {
     password: null,
 
     dialect: 'sqlite',
-    storage: 'sequelize/storage/development.sqlite3',
+    storage: developmentStorage.generateStoragePath(),
     logging: false,
   },
   live: {

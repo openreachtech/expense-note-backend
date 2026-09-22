@@ -1,4 +1,12 @@
 export default {
+  /*
+   * The per-worker database copies are made here, before the first worker starts, and removed after
+   * the last one exits. See `sequelize/tools/JestWorkerStorage.cjs` for why each worker needs a
+   * database of its own.
+   */
+  globalSetup: '<rootDir>/tests/setup-global.cjs',
+  globalTeardown: '<rootDir>/tests/teardown-global.cjs',
+
   setupFilesAfterEnv: [
     '<rootDir>/tests/setup-after-env.js',
   ],

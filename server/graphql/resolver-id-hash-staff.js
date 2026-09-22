@@ -16,12 +16,19 @@
 const STAFF_RESOLVER_ID_HASH = {
   query: {
     signedInStaffMember: 'Q001',
+
+    expenses: 'Q002',
+    expenseCategories: 'Q003',
   },
 
   mutation: {
     signIn: 'M001',
     signOut: 'M002',
     renewAccessToken: 'M003',
+
+    recordExpense: 'M004',
+    correctExpense: 'M005',
+    removeExpense: 'M006',
   },
 }
 

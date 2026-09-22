@@ -2,12 +2,18 @@ import express from 'express'
 import cors from 'cors'
 
 import {
+  getIntrospectionQuery,
+} from 'graphql'
+
+import {
   DateTimeScalar,
 } from '@openreachtech/renchan'
 
 import {
   rootPath,
 } from '../../../../app/globals/_.js'
+
+import GraphqlOperationShapeInspector from '../../../../app/tools/graphql/GraphqlOperationShapeInspector.js'
 
 import StaffGraphqlServerEngine from '../../../../server/graphql/StaffGraphqlServerEngine.js'
 
@@ -867,16 +873,20 @@ describe('StaffGraphqlServerEngine', () => {
     /*
      * Asserted position by position, by the name of the function each middleware factory hands
      * back, because `expect.objectContaining()` refuses a function outright (`typeof other !==
-     * 'object'`) and `expect.any(Function)` would pass for any four of them in any order.
+     * 'object'`) and `expect.any(Function)` would pass for any five of them in any order.
      *
-     * **Four, where the boilerplate mounts five.** The upload middleware that used to sit at
-     * position 3 — and whose case here pinned it by the unnamed arrow it hands back — is gone:
-     * no operation of this audience takes a file, and mounted it parsed an unauthenticated
-     * multipart POST before any resolver or authentication filter ran. Its removal is what moves
-     * the urlencoded parser from position 4 to position 3, and the removal is the reason the
-     * count below is four.
+     * **The upload middleware the boilerplate mounts is gone.** It used to sit at position 3 —
+     * and its case here pinned it by the unnamed arrow it hands back: no operation of this
+     * audience takes a file, and mounted it parsed an unauthenticated multipart POST before any
+     * resolver or authentication filter ran.
+     *
+     * **`refuseExcessiveOperation` is this audience's own, and its position is load-bearing.** It
+     * reads the body `express.json` at position 1 produced, so it cannot be above that; and a
+     * document it refuses should cost nothing further, so it is directly below it. Everything the
+     * boilerplate mounts moves down one to make room, which is why the urlencoded parser is at 4
+     * rather than at 3.
      */
-    describe('to be the four middleware, in the order a request passes through them', () => {
+    describe('to be the five middleware, in the order a request passes through them', () => {
       const cases = [
         {
           factoryParams: {
@@ -915,7 +925,7 @@ describe('StaffGraphqlServerEngine', () => {
           params: {
             middlewareNamePath: '2.name',
           },
-          expected: 'serveStatic',
+          expected: 'refuseExcessiveOperation',
         },
         {
           factoryParams: {
@@ -927,6 +937,19 @@ describe('StaffGraphqlServerEngine', () => {
           },
           params: {
             middlewareNamePath: '3.name',
+          },
+          expected: 'serveStatic',
+        },
+        {
+          factoryParams: {
+            config: /** @type {*} */ ({
+              staticPath: rootPath.to('public/'),
+            }),
+            share: /** @type {*} */ ({}),
+            errorHash: {},
+          },
+          params: {
+            middlewareNamePath: '4.name',
           },
           expected: 'urlencodedParser',
         },
@@ -955,7 +978,7 @@ describe('StaffGraphqlServerEngine', () => {
      * pinned position — an upload parser put back, for instance — fails here even though every
      * position above it still holds what it held.
      */
-    describe('to hold those four middleware and no fifth', () => {
+    describe('to hold those five middleware and no sixth', () => {
       const cases = [
         {
           factoryParams: {
@@ -965,7 +988,7 @@ describe('StaffGraphqlServerEngine', () => {
             share: /** @type {*} */ ({}),
             errorHash: {},
           },
-          expected: 4,
+          expected: 5,
         },
         {
           factoryParams: {
@@ -975,7 +998,7 @@ describe('StaffGraphqlServerEngine', () => {
             share: /** @type {*} */ ({}),
             errorHash: {},
           },
-          expected: 4,
+          expected: 5,
         },
       ]
 
@@ -1185,6 +1208,637 @@ describe('StaffGraphqlServerEngine', () => {
 
         expect(staticSpy)
           .toHaveBeenCalledWith(expected)
+      })
+    })
+  })
+})
+
+describe('StaffGraphqlServerEngine', () => {
+  describe('.get:GraphqlOperationShapeInspectorCtor', () => {
+    test('to be the class reading the shape of a presented document', () => {
+      const actual = StaffGraphqlServerEngine.GraphqlOperationShapeInspectorCtor
+
+      expect(actual)
+        .toBe(GraphqlOperationShapeInspector) // same reference
+    })
+  })
+})
+
+describe('StaffGraphqlServerEngine', () => {
+  describe('#generateExcessiveOperationRefusingMiddleware()', () => {
+    /*
+     * The refusal itself, which is the whole of what this middleware owns.
+     *
+     * **The first case is the amplification the limit exists for**, written out rather than
+     * summarized: eleven `expenses` calls in one document, each of which would run a `count()` and
+     * a `findAll()` of up to a hundred rows with `ExpenseCategory` joined, on a path no rate limit
+     * covers. Before this middleware it was answered. Sixteen kilobytes of body holds about two
+     * hundred and fifty of them.
+     *
+     * The second is the same eleven calls moved behind one fragment spread — the bypass a counter
+     * of what the operation body names outright would miss — and the third is depth.
+     *
+     * `next` is asserted **not** to have been called, because a middleware that both refused and
+     * called `next` would write the refusal and then let the request run anyway.
+     */
+    describe('to refuse a document past a limit', () => {
+      const cases = [
+        {
+          factoryParams: {
+            config: /** @type {*} */ ({
+              staticPath: rootPath.to('public/'),
+            }),
+            share: /** @type {*} */ ({}),
+            errorHash: {},
+          },
+          params: {
+            source: 'query { a1: expenses (input: $input) { expenses { id } } b1: expenses (input: $input) { expenses { id } } c1: expenses (input: $input) { expenses { id } } d1: expenses (input: $input) { expenses { id } } e1: expenses (input: $input) { expenses { id } } f1: expenses (input: $input) { expenses { id } } g1: expenses (input: $input) { expenses { id } } h1: expenses (input: $input) { expenses { id } } i1: expenses (input: $input) { expenses { id } } j1: expenses (input: $input) { expenses { id } } k1: expenses (input: $input) { expenses { id } } }',
+          },
+          expected: {
+            statusCode: 400,
+            body: {
+              errors: [
+                {
+                  message: '203.X000.001',
+                },
+              ],
+            },
+          },
+        },
+        {
+          factoryParams: {
+            config: /** @type {*} */ ({
+              staticPath: rootPath.to('public/'),
+            }),
+            share: /** @type {*} */ ({}),
+            errorHash: {},
+          },
+          params: {
+            source: 'query { ...Many } fragment Many on Query { a1: expenseCategories b1: expenseCategories c1: expenseCategories d1: expenseCategories e1: expenseCategories f1: expenseCategories g1: expenseCategories h1: expenseCategories i1: expenseCategories j1: expenseCategories k1: expenseCategories }',
+          },
+          expected: {
+            statusCode: 400,
+            body: {
+              errors: [
+                {
+                  message: '203.X000.001',
+                },
+              ],
+            },
+          },
+        },
+        {
+          factoryParams: {
+            config: /** @type {*} */ ({
+              staticPath: rootPath.to('public/'),
+            }),
+            share: /** @type {*} */ ({}),
+            errorHash: {},
+          },
+          params: {
+            source: 'query { f0 { f1 { f2 { f3 { f4 { f5 { f6 } } } } } } }',
+          },
+          expected: {
+            statusCode: 400,
+            body: {
+              errors: [
+                {
+                  message: '203.X000.001',
+                },
+              ],
+            },
+          },
+        },
+      ]
+
+      test.each(cases)('source: $params.source', ({
+        factoryParams,
+        params,
+        expected,
+      }) => {
+        const engine = new StaffGraphqlServerEngine(factoryParams)
+        const expressRequest = /** @type {*} */ ({
+          body: {
+            query: params.source,
+          },
+          query: {},
+        })
+        const jsonSpy = jest.fn()
+        const statusSpy = jest.fn()
+        const expressResponse = /** @type {*} */ ({
+          status: statusSpy,
+          json: jsonSpy,
+        })
+        statusSpy.mockReturnValue(expressResponse)
+        const nextSpy = jest.fn()
+        const middleware = engine.generateExcessiveOperationRefusingMiddleware()
+
+        middleware(expressRequest, expressResponse, nextSpy)
+
+        expect(statusSpy)
+          .toHaveBeenCalledWith(expected.statusCode)
+        expect(jsonSpy)
+          .toHaveBeenCalledWith(expected.body)
+        expect(nextSpy)
+          .not
+          .toHaveBeenCalled()
+      })
+    })
+  })
+})
+
+describe('StaffGraphqlServerEngine', () => {
+  describe('#generateExcessiveOperationRefusingMiddleware()', () => {
+    /*
+     * **A limit that broke legitimate traffic would be a worse defect than the one it fixes**, so
+     * the documents this product actually sends are driven through it here, verbatim.
+     *
+     * The first is the deepest of them, lifted from
+     * `tests/__tests__/server/graphql/resolvers/staff/stub/execute-expense-stub-operations.js`,
+     * which is the file holding the real client documents — it nests four levels, `expenses` to
+     * `expenses` to `expenseCategory` to `name`. The three after it are the sign-in mutations the
+     * frontend's own payload classes send.
+     *
+     * The introspection case is the fifth, and it is the one the meta-field exemption exists for:
+     * `getIntrospectionQuery()` measures fifteen levels deep, and GraphiQL — which this engine's
+     * own config mounts a route for — sends it on every page load.
+     *
+     * The last two are requests carrying no document at all: a static-file GET, which passes
+     * through this middleware on its way to `express.static` below it, and a body whose `query` is
+     * an object rather than a string, which `express.json` accepts and a caller controls.
+     *
+     * `status` is asserted **not** to have been called, because a middleware that called `next`
+     * and then also wrote a refusal would be two responses to one request.
+     */
+    describe('to pass on a document this product actually sends', () => {
+      const cases = [
+        {
+          factoryParams: {
+            config: /** @type {*} */ ({
+              staticPath: rootPath.to('public/'),
+            }),
+            share: /** @type {*} */ ({}),
+            errorHash: {},
+          },
+          params: {
+            expressRequest: /** @type {*} */ ({
+              body: {
+                query: `
+                  query ($input: ExpensesInput!) {
+                    expenses (input: $input) {
+                      expenses {
+                        id
+                        spentOn
+                        amount
+                        memo
+                        status
+                        expenseCategory {
+                          id
+                          name
+                          displayOrder
+                        }
+                        createdAt
+                        updatedAt
+                      }
+                      pagination {
+                        limit
+                        offset
+                        sort {
+                          key
+                          direction
+                        }
+                        totalRecords
+                      }
+                    }
+                  }
+                `,
+              },
+              query: {},
+            }),
+            label: 'the deepest real document: expenses, four levels',
+          },
+        },
+        {
+          factoryParams: {
+            config: /** @type {*} */ ({
+              staticPath: rootPath.to('public/'),
+            }),
+            share: /** @type {*} */ ({}),
+            errorHash: {},
+          },
+          params: {
+            expressRequest: /** @type {*} */ ({
+              body: {
+                query: 'mutation SignInMutation ($input: SignInInput!) { signIn (input: $input) { staffMemberId accessToken } }',
+              },
+              query: {},
+            }),
+            label: 'the frontend signIn payload',
+          },
+        },
+        {
+          factoryParams: {
+            config: /** @type {*} */ ({
+              staticPath: rootPath.to('public/'),
+            }),
+            share: /** @type {*} */ ({}),
+            errorHash: {},
+          },
+          params: {
+            expressRequest: /** @type {*} */ ({
+              body: {
+                query: 'mutation RenewAccessTokenMutation { renewAccessToken { accessToken } }',
+              },
+              query: {},
+            }),
+            label: 'the frontend renewAccessToken payload',
+          },
+        },
+        {
+          factoryParams: {
+            config: /** @type {*} */ ({
+              staticPath: rootPath.to('public/'),
+            }),
+            share: /** @type {*} */ ({}),
+            errorHash: {},
+          },
+          params: {
+            expressRequest: /** @type {*} */ ({
+              body: {
+                query: 'query SignedInStaffMemberQuery { signedInStaffMember { staffMemberId name email } }',
+              },
+              query: {},
+            }),
+            label: 'the frontend signedInStaffMember payload',
+          },
+        },
+        {
+          factoryParams: {
+            config: /** @type {*} */ ({
+              staticPath: rootPath.to('public/'),
+            }),
+            share: /** @type {*} */ ({}),
+            errorHash: {},
+          },
+          params: {
+            expressRequest: /** @type {*} */ ({
+              body: {
+                query: getIntrospectionQuery(),
+              },
+              query: {},
+            }),
+            label: 'the introspection query GraphiQL sends, fifteen levels deep',
+          },
+        },
+        {
+          factoryParams: {
+            config: /** @type {*} */ ({
+              staticPath: rootPath.to('public/'),
+            }),
+            share: /** @type {*} */ ({}),
+            errorHash: {},
+          },
+          params: {
+            expressRequest: /** @type {*} */ ({
+              body: {},
+              query: {},
+            }),
+            label: 'a request carrying no document at all',
+          },
+        },
+        {
+          factoryParams: {
+            config: /** @type {*} */ ({
+              staticPath: rootPath.to('public/'),
+            }),
+            share: /** @type {*} */ ({}),
+            errorHash: {},
+          },
+          params: {
+            expressRequest: /** @type {*} */ ({
+              body: {
+                query: {},
+              },
+              query: {},
+            }),
+            label: 'a body whose query is an object rather than a string',
+          },
+        },
+        {
+          factoryParams: {
+            config: /** @type {*} */ ({
+              staticPath: rootPath.to('public/'),
+            }),
+            share: /** @type {*} */ ({}),
+            errorHash: {},
+          },
+          params: {
+            expressRequest: /** @type {*} */ ({
+              body: {
+                query: 'query {',
+              },
+              query: {},
+            }),
+            label: 'text GraphQL itself will refuse with a line and a column',
+          },
+        },
+      ]
+
+      test.each(cases)('label: $params.label', ({
+        factoryParams,
+        params,
+      }) => {
+        const engine = new StaffGraphqlServerEngine(factoryParams)
+        const jsonSpy = jest.fn()
+        const statusSpy = jest.fn()
+        const expressResponse = /** @type {*} */ ({
+          status: statusSpy,
+          json: jsonSpy,
+        })
+        statusSpy.mockReturnValue(expressResponse)
+        const nextSpy = jest.fn()
+        const middleware = engine.generateExcessiveOperationRefusingMiddleware()
+
+        middleware(params.expressRequest, expressResponse, nextSpy)
+
+        expect(nextSpy)
+          .toHaveBeenCalledWith()
+        expect(statusSpy)
+          .not
+          .toHaveBeenCalled()
+      })
+    })
+  })
+})
+
+describe('StaffGraphqlServerEngine', () => {
+  describe('#createOperationShapeInspector()', () => {
+    describe('to read the document the request carries', () => {
+      const cases = [
+        {
+          factoryParams: {
+            config: /** @type {*} */ ({
+              staticPath: rootPath.to('public/'),
+            }),
+            share: /** @type {*} */ ({}),
+            errorHash: {},
+          },
+          params: {
+            expressRequest: /** @type {*} */ ({
+              body: {
+                query: 'query { expenseCategories { expenseCategories { id } } }',
+              },
+              query: {},
+            }),
+            label: 'a POST body carrying the document',
+          },
+        },
+        {
+          factoryParams: {
+            config: /** @type {*} */ ({
+              staticPath: rootPath.to('public/'),
+            }),
+            share: /** @type {*} */ ({}),
+            errorHash: {},
+          },
+          params: {
+            expressRequest: /** @type {*} */ ({
+              body: {},
+              query: {
+                query: 'query { signedInStaffMember { name } }',
+              },
+            }),
+            label: 'a GET query string carrying the document',
+          },
+        },
+      ]
+
+      test.each(cases)('label: $params.label', ({
+        factoryParams,
+        params,
+      }) => {
+        const engine = new StaffGraphqlServerEngine(factoryParams)
+
+        const actual = engine.createOperationShapeInspector({
+          expressRequest: params.expressRequest,
+        })
+
+        expect(actual)
+          .toBeInstanceOf(GraphqlOperationShapeInspector)
+      })
+    })
+
+    describe('to answer null where there is nothing to inspect', () => {
+      const cases = [
+        {
+          factoryParams: {
+            config: /** @type {*} */ ({
+              staticPath: rootPath.to('public/'),
+            }),
+            share: /** @type {*} */ ({}),
+            errorHash: {},
+          },
+          params: {
+            expressRequest: /** @type {*} */ ({
+              body: {},
+              query: {},
+            }),
+            label: 'a request carrying no document at all',
+          },
+        },
+        {
+          factoryParams: {
+            config: /** @type {*} */ ({
+              staticPath: rootPath.to('public/'),
+            }),
+            share: /** @type {*} */ ({}),
+            errorHash: {},
+          },
+          params: {
+            expressRequest: /** @type {*} */ ({
+              body: {
+                query: 'query {',
+              },
+              query: {},
+            }),
+            label: 'a request carrying text that is not a document',
+          },
+        },
+      ]
+
+      test.each(cases)('label: $params.label', ({
+        factoryParams,
+        params,
+      }) => {
+        const engine = new StaffGraphqlServerEngine(factoryParams)
+
+        const actual = engine.createOperationShapeInspector({
+          expressRequest: params.expressRequest,
+        })
+
+        expect(actual)
+          .toBeNull()
+      })
+    })
+  })
+})
+
+describe('StaffGraphqlServerEngine', () => {
+  describe('#extractRequestedSource()', () => {
+    /*
+     * The POST body is read before the query string, because that is where every client of this
+     * product puts it and the query string is the exception — a GraphiQL share link or a
+     * hand-typed URL. The third case pins that order: a request carrying both is read from the
+     * body.
+     */
+    describe('to answer the document text the request carries', () => {
+      const cases = [
+        {
+          factoryParams: {
+            config: /** @type {*} */ ({
+              staticPath: rootPath.to('public/'),
+            }),
+            share: /** @type {*} */ ({}),
+            errorHash: {},
+          },
+          params: {
+            expressRequest: /** @type {*} */ ({
+              body: {
+                query: 'query { posted }',
+              },
+              query: {},
+            }),
+            label: 'a POST body alone',
+          },
+          expected: 'query { posted }',
+        },
+        {
+          factoryParams: {
+            config: /** @type {*} */ ({
+              staticPath: rootPath.to('public/'),
+            }),
+            share: /** @type {*} */ ({}),
+            errorHash: {},
+          },
+          params: {
+            expressRequest: /** @type {*} */ ({
+              body: {},
+              query: {
+                query: 'query { queried }',
+              },
+            }),
+            label: 'a GET query string alone',
+          },
+          expected: 'query { queried }',
+        },
+        {
+          factoryParams: {
+            config: /** @type {*} */ ({
+              staticPath: rootPath.to('public/'),
+            }),
+            share: /** @type {*} */ ({}),
+            errorHash: {},
+          },
+          params: {
+            expressRequest: /** @type {*} */ ({
+              body: {
+                query: 'query { posted }',
+              },
+              query: {
+                query: 'query { queried }',
+              },
+            }),
+            label: 'a request carrying both',
+          },
+          expected: 'query { posted }',
+        },
+      ]
+
+      test.each(cases)('label: $params.label', ({
+        factoryParams,
+        params,
+        expected,
+      }) => {
+        const engine = new StaffGraphqlServerEngine(factoryParams)
+
+        const actual = engine.extractRequestedSource({
+          expressRequest: params.expressRequest,
+        })
+
+        expect(actual)
+          .toBe(expected)
+      })
+    })
+
+    /*
+     * Neither place is trusted to hold a string: a caller controls the shape of both, and
+     * `{"query": {}}` is a body `express.json` accepts and hands on.
+     */
+    describe('to answer null where the request carries none', () => {
+      const cases = [
+        {
+          factoryParams: {
+            config: /** @type {*} */ ({
+              staticPath: rootPath.to('public/'),
+            }),
+            share: /** @type {*} */ ({}),
+            errorHash: {},
+          },
+          params: {
+            expressRequest: /** @type {*} */ ({
+              body: {},
+              query: {},
+            }),
+            label: 'neither place carrying anything',
+          },
+        },
+        {
+          factoryParams: {
+            config: /** @type {*} */ ({
+              staticPath: rootPath.to('public/'),
+            }),
+            share: /** @type {*} */ ({}),
+            errorHash: {},
+          },
+          params: {
+            expressRequest: /** @type {*} */ ({
+              body: {
+                query: {},
+              },
+              query: {
+                query: 42,
+              },
+            }),
+            label: 'both places carrying something that is not a string',
+          },
+        },
+        {
+          factoryParams: {
+            config: /** @type {*} */ ({
+              staticPath: rootPath.to('public/'),
+            }),
+            share: /** @type {*} */ ({}),
+            errorHash: {},
+          },
+          params: {
+            expressRequest: /** @type {*} */ ({}),
+            label: 'a request with no body and no query string at all',
+          },
+        },
+      ]
+
+      test.each(cases)('label: $params.label', ({
+        factoryParams,
+        params,
+      }) => {
+        const engine = new StaffGraphqlServerEngine(factoryParams)
+
+        const actual = engine.extractRequestedSource({
+          expressRequest: params.expressRequest,
+        })
+
+        expect(actual)
+          .toBeNull()
       })
     })
   })

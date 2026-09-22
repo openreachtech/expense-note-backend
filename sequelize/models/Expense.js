@@ -1,5 +1,6 @@
 import {
   ModelAttributeFactory,
+  PaginationMixinModel,
 } from '@openreachtech/renchan-sequelize'
 
 import BaseAppRenchanModel from '../baseModel/BaseAppRenchanModel.js'
@@ -233,5 +234,41 @@ export default class Expense extends BaseAppRenchanModel {
     if (expenseCategory === null) {
       throw new Error(`Expense names an ExpenseCategory that does not exist: ${expenseCategoryId}`)
     }
+  }
+
+  /**
+   * get: Mixin models to apply
+   *
+   * `PaginationMixinModel` is here because the entries list of §11 is paginated: it gives this
+   * model `findAllWithPagination()`, reached through the mixin handler as
+   * `Expense.$.findAllWithPagination({ pagination, options })` — not as a method on the model
+   * itself — so the offset/limit page and its total are never hand-rolled.
+   *
+   * Two things about how it works, because getting either wrong is silent.
+   *
+   * First: the limit and the offset travel through the mixin's own scope, not through `options`.
+   * The mixin runs `count(options)` and only then a `findAll(options)` on a model scoped with the
+   * pagination, so `count()` sees an unlimited query and the total is the total. Put a `limit` or
+   * an `offset` into `options` and the count counts the page instead of the table, and every total
+   * the API reports is wrong. `options` carries `where`, `include` and `order` — never `limit` or
+   * `offset`.
+   *
+   * Second: `count()` receives the same `options` as the `findAll`, `include` and all. An `include`
+   * that fans one row out into many makes `count()` count joined rows rather than expenses, unless
+   * the caller adds `distinct: true`. As this model stands that cannot happen: both of its
+   * associations, `StaffMember` and `ExpenseCategory`, are `belongsTo`, so each expense joins at
+   * most one row of each and the count is exact. That holds only while that stays true. The first
+   * `hasMany` include added here — a later feature summing per month is the obvious candidate —
+   * breaks it, and breaks it quietly: the page looks right and only the total lies.
+   *
+   * The response value the mixin returns exposes `limit`, `offset` and `totalNumber`. The field the
+   * contract names is `totalRecords`, so the resolver maps the last one over.
+   *
+   * @returns {Array<Function>} Mixin models
+   */
+  static get Mixins () {
+    return [
+      PaginationMixinModel,
+    ]
   }
 }
