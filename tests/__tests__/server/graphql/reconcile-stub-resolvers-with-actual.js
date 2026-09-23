@@ -31,11 +31,28 @@ import CustomerGraphqlServerEngine from '../../../../server/graphql/CustomerGrap
  * nothing ever built a filter for it.
  *
  * -----------------------------------------------------------------------------------------------
- * It is not live today, and that is the point
+ * It went live for the first time at `#monthly-summary`'s checkpoint 4, and this test caught it
  * -----------------------------------------------------------------------------------------------
  *
- * Every operation of every audience currently has both an actual and a stub, so the actual always
- * wins and everything is filtered. **The hazard is the future**: deleting or renaming one `actual/`
+ * **This paragraph used to say every operation of every audience has both an actual and a stub, so
+ * the actual always wins and everything is filtered. That is no longer true**, and it was corrected
+ * here rather than left standing, because a docblock asserting a state the tree has left is a claim
+ * a later reader relies on.
+ *
+ * `#monthly-summary`'s checkpoint 4 adds a `monthlyExpenses` stub whose actual resolver is
+ * checkpoint 6's work. **In that window the operation really is served unfiltered**, and this test
+ * really does fail -- by exactly one case, `audience: staff`, naming exactly that one operation.
+ * **That is the guard working rather than a false positive**: the tree is in the state this file
+ * exists to report, and it reported it.
+ *
+ * **It was left red rather than exempted, and the reasoning is recorded so nobody reads the red as
+ * neglect.** An exemption is precisely the edit this test exists to make look like a security
+ * change. The window is bounded three ways: it closes at checkpoint 6, it lives on an unmerged
+ * `feature/` branch that merges only once checkpoint 9 passes, and while it is open every
+ * checkpoint verifies the failing set is *exactly* this one case -- which is a checkable claim,
+ * unlike "some tests fail".
+ *
+ * **The hazard this was written for is still the future one**: deleting or renaming one `actual/`
  * resolver would silently convert its operation into an unauthenticated stub answering fabricated
  * success. `#expense-entry` added five such pairs, three of them mutations — `recordExpense`,
  * `correctExpense` and `removeExpense`, which write.

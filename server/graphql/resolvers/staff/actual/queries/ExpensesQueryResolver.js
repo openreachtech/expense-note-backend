@@ -6,59 +6,37 @@ import {
   RequestPagination,
 } from '@openreachtech/renchan-sequelize'
 
+import EXPENSE_ENTRY_ORDER_CONSTANT_HASH from '../../../../../../app/constants/expenseEntryOrderConstants.js'
+
 import ExpensesInputValidator from '../../../../../../app/tools/validator/resolvers/staff/queries/ExpensesInputValidator.js'
 
 import Expense from '../../../../../../sequelize/models/Expense.js'
 import ExpenseCategory from '../../../../../../sequelize/models/ExpenseCategory.js'
 
 /*
- * The order this operation answers in.
+ * The order this operation answers in, which is **no longer this file's own**.
  *
- * **Newest `spentOn` first, and where two entries share a date, the more recently recorded
- * first.** Spec **section 6's `entry order` row** is where that clause lives — one sentence
- * covering section 11.2's screen and section 12.2's both, so two lists of the same rows can never
- * disagree about the same day — and section 9.3 carries the composite
- * `(staff_member_id, spent_on)` index that serves its first key beside exactly this `where`.
+ * Spec section 6's `entry order` states one clause for two screens — section 11.2's list and
+ * section 12.2's month — so the clause is declared once, in
+ * `constants/expenseEntryOrderConstants.cjs`, and imported by the two resolvers that owe it.
+ * **That file is where the reasoning lives**: which two keys, why `id` carries the second one,
+ * what the tie-break reverses, and why two private copies were the thing to remove rather than
+ * the thing to add.
  *
- * **`id` is how this file delivers the second half, and section 6 names no column on purpose.**
- * The spec states the behaviour — the more recently recorded first — because `id` is what
- * happens to carry it today: the primary key, already indexed, minted ascending, so monotonic
- * with the order entries were recorded. A later column recording that moment more directly would
- * change this line and leave section 6 untouched. The spec owes the behaviour; the column is
- * this file's.
+ * It was a private module constant of this file until `#monthly-summary`'s checkpoint 6, and the
+ * paragraph beside it then said it was declared once "so that the clause this operation owes is a
+ * fact of the file rather than a literal buried in a method". **That sentence described a
+ * file-local constant and has stopped being true**, which is why it was rewritten rather than
+ * left: the clause is now a fact of the *product*, and this file reads it rather than states it.
+ * A second operation owing the identical clause is a thing two copies could drift apart on, and a
+ * drift there reintroduces exactly the defect Q61 was raised to fix.
  *
- * Ordering by `id` or by `createdAt` **alone** would look right against most data and be wrong:
- * the development seeder deliberately scrambles `spent_on` against the id order, and the first
- * row of the first page differs under each.
- *
- * -------------------------------------------------------------------------------------------
- * This reverses an earlier decision, and that decision was right when it was taken
- * -------------------------------------------------------------------------------------------
- *
- * Until section 6 gained that row this constant held one key, under a paragraph explaining that
- * no tie-break followed it deliberately rather than by omission: `#expense-entry`'s checkpoint 1
- * had not decided one, the development seeder was built so as not to raise the question, and
- * settling it here would have been a resolver inventing a clause with no owner. **On a paginated
- * view of one member of staff's whole history the tie is rare**, so leaving it open cost little,
- * and writing spec text nobody had decided would have cost more.
- *
- * **What changed is the scope, not that reasoning.** Section 12 reads a single month, where a
- * train fare and a lunch on the same day is an ordinary working day rather than a rare
- * collision — and section 12's own use case has somebody reading down the same column twice
- * against a card statement. Two reads of one month that legitimately differ are what that person
- * meets.
- *
- * Raised as **Q61**, which set out the alternatives and what each cost, and decided by the user
- * over both of them: settled once, in section 6, for both screens — because one screen breaking
- * the tie while the other did not is the same disagreement arriving by another route.
- *
- * It is declared once, as a module constant, so that the clause this operation owes is a fact of
- * the file rather than a literal buried in a method.
+ * What stays this file's own is answering for it: the `order` handed to the model is pinned by
+ * this resolver's own test, as it is by `MonthlyExpensesQueryResolver`'s.
  */
-const EXPENSES_ORDER = [
-  ['spentOn', 'DESC'],
-  ['id', 'DESC'],
-]
+const {
+  EXPENSE_ENTRY_ORDER,
+} = EXPENSE_ENTRY_ORDER_CONSTANT_HASH
 
 /**
  * Resolver of the `expenses` query.
@@ -318,7 +296,8 @@ export default class ExpensesQueryResolver extends BaseQueryResolver {
    * outside the query rather than filtered out of its result. The category is eager-loaded, which
    * is what keeps one page one pair of queries instead of one query per row.
    *
-   * The ordering is `EXPENSES_ORDER`, whose two keys and their provenance are set out beside it.
+   * The ordering is `EXPENSE_ENTRY_ORDER.CLAUSE`, whose two keys and their provenance are set out
+   * in `constants/expenseEntryOrderConstants.cjs`.
    *
    * `options` carries no `limit` and no `offset` on purpose — see the class comment.
    *
@@ -352,7 +331,7 @@ export default class ExpensesQueryResolver extends BaseQueryResolver {
           include: [
             this.ExpenseCategoryModel,
           ],
-          order: EXPENSES_ORDER,
+          order: EXPENSE_ENTRY_ORDER.CLAUSE,
         },
       })
     )

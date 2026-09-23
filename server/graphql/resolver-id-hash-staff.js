@@ -19,6 +19,8 @@ const STAFF_RESOLVER_ID_HASH = {
 
     expenses: 'Q002',
     expenseCategories: 'Q003',
+
+    monthlyExpenses: 'Q004',
   },
 
   mutation: {

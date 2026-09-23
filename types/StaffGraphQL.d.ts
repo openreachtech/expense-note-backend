@@ -151,5 +151,21 @@ declare global {
     interface RemoveExpenseResult {
       expenseId: number
     }
+
+    ////////////////////////////////////////////////////////////////////////////
+    //// Monthly summary — 004-monthly-summary.graphql
+    ////////////////////////////////////////////////////////////////////////////
+
+    interface MonthlyExpensesInput {
+      year: number
+      month: number
+    }
+
+    // `expenses` reuses the `Expense` above rather than declaring a second row shape, so a
+    // month's entries and the total taken over them can never describe different shapes.
+    interface MonthlyExpensesResult {
+      expenses: Array<Expense>
+      totalAmount: number
+    }
   }
 }
