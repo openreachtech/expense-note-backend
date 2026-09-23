@@ -14,27 +14,57 @@ import ExpenseCategory from '../../../../../../sequelize/models/ExpenseCategory.
 /*
  * The order this operation answers in.
  *
- * **`spentOn`, newest first — the day the money was paid, not the day the entry was typed.** Spec
- * section 11.2 says so, it was settled at checkpoint 1, and section 9.3 carries the composite
- * `(staff_member_id, spent_on)` index that serves exactly this clause beside exactly this
- * `where`. Ordering by `id` or by `createdAt` would look right against most data and be wrong:
+ * **Newest `spentOn` first, and where two entries share a date, the more recently recorded
+ * first.** Spec **section 6's `entry order` row** is where that clause lives — one sentence
+ * covering section 11.2's screen and section 12.2's both, so two lists of the same rows can never
+ * disagree about the same day — and section 9.3 carries the composite
+ * `(staff_member_id, spent_on)` index that serves its first key beside exactly this `where`.
+ *
+ * **`id` is how this file delivers the second half, and section 6 names no column on purpose.**
+ * The spec states the behaviour — the more recently recorded first — because `id` is what
+ * happens to carry it today: the primary key, already indexed, minted ascending, so monotonic
+ * with the order entries were recorded. A later column recording that moment more directly would
+ * change this line and leave section 6 untouched. The spec owes the behaviour; the column is
+ * this file's.
+ *
+ * Ordering by `id` or by `createdAt` **alone** would look right against most data and be wrong:
  * the development seeder deliberately scrambles `spent_on` against the id order, and the first
  * row of the first page differs under each.
  *
- * **No tie-break follows it, and that is deliberate rather than forgotten.** Two entries of one
- * member of staff sharing a `spentOn` have no decided order — checkpoint 1 did not decide one and
- * the seeder was built so as not to raise the question — so adding `id` here would be settling it
- * in a resolver. It is declared once, as a module constant, so that the clause this operation
- * owes is a fact of the file rather than a literal buried in a method.
+ * -------------------------------------------------------------------------------------------
+ * This reverses an earlier decision, and that decision was right when it was taken
+ * -------------------------------------------------------------------------------------------
+ *
+ * Until section 6 gained that row this constant held one key, under a paragraph explaining that
+ * no tie-break followed it deliberately rather than by omission: `#expense-entry`'s checkpoint 1
+ * had not decided one, the development seeder was built so as not to raise the question, and
+ * settling it here would have been a resolver inventing a clause with no owner. **On a paginated
+ * view of one member of staff's whole history the tie is rare**, so leaving it open cost little,
+ * and writing spec text nobody had decided would have cost more.
+ *
+ * **What changed is the scope, not that reasoning.** Section 12 reads a single month, where a
+ * train fare and a lunch on the same day is an ordinary working day rather than a rare
+ * collision — and section 12's own use case has somebody reading down the same column twice
+ * against a card statement. Two reads of one month that legitimately differ are what that person
+ * meets.
+ *
+ * Raised as **Q61**, which set out the alternatives and what each cost, and decided by the user
+ * over both of them: settled once, in section 6, for both screens — because one screen breaking
+ * the tie while the other did not is the same disagreement arriving by another route.
+ *
+ * It is declared once, as a module constant, so that the clause this operation owes is a fact of
+ * the file rather than a literal buried in a method.
  */
 const EXPENSES_ORDER = [
   ['spentOn', 'DESC'],
+  ['id', 'DESC'],
 ]
 
 /**
  * Resolver of the `expenses` query.
  *
- * Answers one page of the **caller's own** recorded expenses, newest `spentOn` first.
+ * Answers one page of the **caller's own** recorded expenses, newest `spentOn` first and,
+ * where two share a date, the more recently recorded first (spec section 6, `entry order`).
  *
  * -------------------------------------------------------------------------------------------
  * Whose rows come back
@@ -193,7 +223,7 @@ export default class ExpensesQueryResolver extends BaseQueryResolver {
    * @param {GraphqlType.ResolverInput<{
    *   input: server.graphql.staff.ExpensesInput
    * }>} params - Parameters.
-   * @returns {Promise<server.graphql.staff.ExpensesResult>} One page of the caller's own entries, newest `spentOn` first.
+   * @returns {Promise<server.graphql.staff.ExpensesResult>} One page of the caller's own entries, newest `spentOn` first and the more recently recorded first within a date.
    * @throws {GraphqlType.Error} Refusal of a caller with no session, or of a page nobody could be served.
    * @public
    */
@@ -288,6 +318,8 @@ export default class ExpensesQueryResolver extends BaseQueryResolver {
    * outside the query rather than filtered out of its result. The category is eager-loaded, which
    * is what keeps one page one pair of queries instead of one query per row.
    *
+   * The ordering is `EXPENSES_ORDER`, whose two keys and their provenance are set out beside it.
+   *
    * `options` carries no `limit` and no `offset` on purpose — see the class comment.
    *
    * @param {{
@@ -298,7 +330,7 @@ export default class ExpensesQueryResolver extends BaseQueryResolver {
    * @returns {Promise<{
    *   pagination: import('@openreachtech/renchan-sequelize').ResponsePagination
    *   records: Array<model.Expense>
-   * }>} The page, and the pagination describing the whole set it came from.
+   * }>} The page in section 6's entry order, and the pagination describing the whole set it came from.
    */
   async findExpensesPage ({
     staffMemberId,

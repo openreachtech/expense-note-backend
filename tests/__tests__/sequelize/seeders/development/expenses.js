@@ -263,10 +263,16 @@ describe('expenses development seeder', () => {
 })
 
 /*
- * One member of staff, one date, one row. A tie-break between two rows of the same member of staff
- * on the same date was never decided, so the fixture must never raise the question: a test that
- * read a page of entries and found two rows it could not order would be asking the code to answer
- * something nobody specified.
+ * One member of staff, one date, one row -- still asserted, on a reason that has been replaced.
+ *
+ * It used to be that a tie-break between two rows of one member of staff on one date had never
+ * been decided, so the fixture must not raise the question. Section 6's `entry order` row has
+ * since decided it (Q61): newest `spent_on` first, and within a date the more recently recorded
+ * first. The assertion stays, and stays absolute, for a reason of its own: these fourteen rows land
+ * in a single `bulkInsert`, so a tie seeded here would carry a recording moment that never
+ * happened and would pin an order the ids alone decide. The tie the product now owes an answer for
+ * is made where recording order is real, through `recordExpense`, in
+ * `tests/_orders/Expense/ExpensesQueryResolver.js`.
  *
  * Each count is capped at the last seeded id, so a row the product writes later -- which takes an
  * id above 10200014 -- cannot turn this red by happening to fall on a seeded date.
