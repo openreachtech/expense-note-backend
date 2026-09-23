@@ -79,8 +79,17 @@ const {
  *     first row of the first page differs under each. A resolver that ordered by `id` or by
  *     `created_at` (every row here shares one, written in a single insert) therefore FAILS rather
  *     than passing by luck.
- *   - No two rows of the SAME member of staff share a `spent_on`. A same-date tie-break was never
- *     decided, and seeding data that raised the question would be deciding it.
+ *   - No two rows of the SAME member of staff share a `spent_on`, and that is STILL deliberate --
+ *     but the reason has changed and the sentence here once said the old one. When these rows were
+ *     written a same-date tie-break had not been decided, so seeding a tie would have been deciding
+ *     it. Section 6's `entry order` row has since decided it (Q61): newest `spent_on` first, and
+ *     within a date the more recently recorded first. The fixture keeps no tie anyway, because
+ *     these fourteen rows land in ONE `bulkInsert` -- `created_at` is identical across them and
+ *     the ids are the seeder's own, so a tie seeded here would be ordered by a recording moment
+ *     that never happened. A tie is made where it is real: `tests/_orders/Expense/` records two
+ *     entries on one date THROUGH `recordExpense`, in a stated order, and reads them back.
+ *     `tests/__tests__/sequelize/seeders/development/expenses.js` asserts the absence of a tie
+ *     here, and that test is what keeps this bullet true.
  *   - All four categories are used, by both members of staff.
  *   - Two rows carry a null memo (one per member of staff), because section 11 requires the memo to
  *     be genuinely optional and to read back empty rather than failing.

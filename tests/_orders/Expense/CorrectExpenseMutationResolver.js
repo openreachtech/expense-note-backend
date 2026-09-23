@@ -44,8 +44,15 @@ import ExpensesQueryResolver from '../../../server/graphql/resolvers/staff/actua
  * attempt against them left every field of every one of them alone.
  *
  * Every corrected `spentOn` is chosen so that no two entries of `10110001` ever hold the same one
- * at the same moment — the seeder took the same care, because a same-date tie-break was never
- * decided and seeding data that raised the question would be deciding it.
+ * at the same moment, and the seeder took the same care. **The reason has since changed.** When
+ * both were written a same-date tie-break had not been decided, so raising the question would have
+ * been deciding it; section 6's `entry order` row has now decided it (Q61), newest `spent_on`
+ * first and within a date the more recently recorded first. What the care buys today is narrower
+ * and still worth having: every page this file reads back is ordered by its dates alone, so a case
+ * here fails for the reason it names — a correction that wrote the wrong row — rather than for an
+ * ordering this file does not test. The tie-break itself is exercised in
+ * `tests/_orders/Expense/ExpensesQueryResolver.js`, which makes its own tie rather than borrowing
+ * one from a fixture.
  *
  * -------------------------------------------------------------------------------------------
  * How "the number of entries did not change" is proved

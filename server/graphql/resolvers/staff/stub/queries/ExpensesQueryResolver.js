@@ -45,15 +45,22 @@ const OTHER_EXPENSE_CATEGORY = {
  * for.
  *
  * **Written in the order the operation is required to answer in** — newest `spentOn` first, the
- * day the money was paid and not the day the entry was typed (spec section 11.2, resolved at
- * checkpoint 1, and the composite index section 9.3 declares for it). The array is already in that
- * order and nothing here sorts it: a stub holds literals, and ordering them by hand is how this
- * one stays literal. A screen built against a differently ordered stub would look right and be
- * wrong, which is why the order is part of the data rather than left to chance.
+ * day the money was paid and not the day the entry was typed (spec **section 6, `entry order`**,
+ * and the composite index section 9.3 declares for it). The array is already in that order and
+ * nothing here sorts it: a stub holds literals, and ordering them by hand is how this one stays
+ * literal. A screen built against a differently ordered stub would look right and be wrong, which
+ * is why the order is part of the data rather than left to chance.
  *
- * No two entries share a `spentOn`. A same-date tie-break was deliberately not decided at
- * checkpoint 1 — inventing one here would be deciding it — so the data does not raise the
- * question.
+ * **No two entries share a `spentOn`, and the reason is no longer the one this paragraph used to
+ * give.** It said a same-date tie-break had deliberately not been decided, so the data must not
+ * raise the question. Section 6 has since decided it (Q61): within a date, the more recently
+ * recorded first. The rows below still carry no tie, and that is now a fixture choice rather than
+ * a refusal to settle anything — these twelve literals are what the frontend builds its screen
+ * against and what this stub's own suite asserts by value, so giving two of them one date would
+ * change a fixture two sides already read, to demonstrate an order a literal array cannot get
+ * wrong. **A stub answers with a hardcoded page; it applies no ordering, so it cannot disagree
+ * with section 6.** The clause is the actual resolver's to keep, and the tie it now settles is
+ * exercised where rows are really written — `tests/_orders/Expense/ExpensesQueryResolver.js`.
  *
  * Every `amount` is an integer number of yen. Spec section 4 puts more than one currency
  * permanently out of scope, so there is no currency and no minor unit anywhere in this feature.
@@ -256,7 +263,7 @@ export default class ExpensesQueryResolver extends BaseQueryResolver {
    * @param {GraphqlType.ResolverInput<{
    *   input: server.graphql.staff.ExpensesInput
    * }>} params - Parameters.
-   * @returns {Promise<server.graphql.staff.ExpensesResult>} A page of entries, newest `spentOn` first.
+   * @returns {Promise<server.graphql.staff.ExpensesResult>} A page of entries, in section 6's entry order.
    * @public
    */
   async resolve ({

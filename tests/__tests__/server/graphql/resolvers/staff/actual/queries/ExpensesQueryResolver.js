@@ -31,6 +31,14 @@ import ExpenseCategory from '../../../../../../../../sequelize/models/ExpenseCat
  * which matches neither ascending nor descending id and differs at the first row under each. A
  * resolver ordering by `id` or by `createdAt` — every row shares one — therefore fails here
  * rather than passing by luck.
+ *
+ * **What this file cannot check, and where that is checked instead.** Section 6's `entry order`
+ * settles the same-date tie as well — the more recently recorded first — and no case here can
+ * exercise it: the seeder gives no member of staff two rows on one date, so every page below is
+ * decided by its dates alone. A tie needs rows recorded in a stated order, which means writing
+ * them, which puts the test in `tests/_orders/`. It is
+ * `tests/_orders/Expense/ExpensesQueryResolver.js`, and it is the only place the second key of
+ * `EXPENSES_ORDER` is answerable for.
  */
 
 describe('ExpensesQueryResolver', () => {
@@ -643,6 +651,107 @@ describe('ExpensesQueryResolver', () => {
 
         expect(expensesPage.records)
           .toHaveLength(0)
+      })
+    })
+  })
+})
+
+describe('ExpensesQueryResolver', () => {
+  describe('#findExpensesPage()', () => {
+    /*
+     * **The ordering clause itself, asserted as the two keys handed to the model.**
+     *
+     * Section 6's `entry order` is two things — newest `spent_on` first, and within a date the
+     * more recently recorded first — and the second one is **not observable through this
+     * database**. That was measured rather than assumed, on the seeded SQLite file this suite
+     * runs against:
+     *
+     *     EXPLAIN QUERY PLAN
+     *       SELECT id FROM expenses WHERE staff_member_id = ? ORDER BY spent_on DESC
+     *     -> SEARCH expenses USING COVERING INDEX expenses_smi_so_index (staff_member_id=?)
+     *
+     * Section 9.3's composite index is `(staff_member_id, spent_on)`, and SQLite keys its entries
+     * by the rowid beneath that, so serving `spent_on DESC` is a backwards walk of the index and
+     * ties come back **rowid descending — which is already the order section 6 asks for**. Three
+     * rows recorded on one date come back correctly ordered with `['id', 'DESC']` present and
+     * with it deleted, so a test that only read rows back cannot tell the two apart here.
+     *
+     * That coincidence is the engine's and is promised by nobody: SQL leaves the order of tied
+     * rows undefined, this product's own section 8 declares **MariaDB** as the store, and a
+     * planner that filesorts a small table rather than walking the index answers in scan order
+     * instead. So the clause is asserted where it is stated — the `order` this operation hands
+     * the model — and **this is the describe that fails if the second key is deleted**.
+     *
+     * `tests/_orders/Expense/ExpensesQueryResolver.js` asserts the behaviour it buys, against
+     * rows genuinely recorded one after another, which is the half of it a caller can see.
+     *
+     * The whole argument is asserted rather than the `order` alone, so a key added to `where` or
+     * an `include` dropped is caught here too. The pagination is asserted by kind: what it
+     * carries is two other describes' subject, and it is constructed with no sort at all.
+     */
+    describe('should hand the model both keys of section 6 entry order', () => {
+      const cases = [
+        {
+          params: {
+            staffMemberId: 10110001,
+            limit: 3,
+            offset: 0,
+          },
+          expected: {
+            pagination: expect.any(RequestPagination),
+            options: {
+              where: {
+                StaffMemberId: 10110001,
+              },
+              include: [
+                ExpenseCategory,
+              ],
+              order: [
+                ['spentOn', 'DESC'],
+                ['id', 'DESC'],
+              ],
+            },
+          },
+        },
+        {
+          params: {
+            staffMemberId: 10110002,
+            limit: 10,
+            offset: 4,
+          },
+          expected: {
+            pagination: expect.any(RequestPagination),
+            options: {
+              where: {
+                StaffMemberId: 10110002,
+              },
+              include: [
+                ExpenseCategory,
+              ],
+              order: [
+                ['spentOn', 'DESC'],
+                ['id', 'DESC'],
+              ],
+            },
+          },
+        },
+      ]
+
+      test.each(cases)('staffMemberId: $params.staffMemberId', async ({
+        params,
+        expected,
+      }) => {
+        const resolver = ExpensesQueryResolver.create()
+        const findAllWithPaginationSpy = jest.spyOn(Expense.$, 'findAllWithPagination')
+          .mockResolvedValue(/** @type {*} */ ({
+            pagination: {},
+            records: [],
+          }))
+
+        await resolver.findExpensesPage(params)
+
+        expect(findAllWithPaginationSpy)
+          .toHaveBeenCalledWith(expected)
       })
     })
   })
