@@ -7,13 +7,23 @@
  * section 11, not section 7's non-functional requirements, not the pinned contract. So a caller
  * could ask for a hundred thousand rows and be served them, with every category joined. That is
  * not a live defect while a member of staff has a few hundred expenses, but the shape is permanent
- * while the data is not, and `#monthly-summary` inherits this pagination shape.
+ * while the data is not.
  *
  * **`100` is DECIDED, and section 7 is now its authority rather than this file.** Spec section 7
  * carries a `Page size` row: a paginated read answers at most 100 rows per request, and a larger
- * `limit` is refused as invalid input rather than silently reduced. `monthlyExpenses` inherits the
- * same ceiling by that row's own words. **Read the spec, not this comment, for what the rule is** --
- * this constant implements it.
+ * `limit` is refused as invalid input rather than silently reduced. **Read the spec, not this
+ * comment, for what the rule is** -- this constant implements it.
+ *
+ * **This ceiling reaches `expenses` and nothing else, and two sentences here said otherwise until
+ * `#monthly-summary`'s checkpoint 1 read section 12.** `monthlyExpenses` is deliberately
+ * unpaginated (section 12.1 declares no pagination input), so it has no `limit` for this number to
+ * cap; what bounds it is section 7's *heaviest single operation* row, one member of staff's month
+ * at a few hundred rows -- which is MORE than this 100 and always was. Section 7 itself now says
+ * so, corrected at `738dd6e`.
+ *
+ * **The stale sentences are removed rather than left beside the correction**, because a docblock
+ * that states a reversed rule is worse than no docblock: it is a claim a later reader relies on,
+ * written by somebody who was right at the time.
  *
  * **The provenance is kept whole because each step of it did different work.** The number was
  * SUGGESTED by the peer session driving this work, on the reasoning section 7 now carries: section
