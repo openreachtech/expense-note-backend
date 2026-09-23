@@ -1,0 +1,48 @@
+################################################################################
+#### Reading one month of one's own expenses, with the total taken over them
+####
+#### spec 1.0.0 section 12.1 is the complete operation list of this domain — one
+#### query and nothing else — and every type below is taken verbatim from the
+#### pinned contract at .hora/contracts/1.0.0/staff-graphql.graphql.
+####
+#### There is deliberately no MUTATION section: this domain writes nothing. The
+#### month it reports on is the one the caller names, and the rows it reports on
+#### are the caller's own.
+####
+#### `Expense` and `ExpenseCategory` are declared once in 003-expense-entry.graphql
+#### and referenced here; the `DateTime` scalar and the pagination pair are declared
+#### once in 001-common.graphql. None of them is redeclared: the loader concatenates
+#### every file in this directory into one schema, so a second declaration is a
+#### duplicate type, not an override. Reusing `Expense` is what the contract's own
+#### comment asks for — a month's entries and the total taken over them can then
+#### never describe different shapes.
+################################################################################
+
+################################################################################
+#### QUERY
+################################################################################
+
+type Query {
+  monthlyExpenses(input: MonthlyExpensesInput!): MonthlyExpensesResult!
+}
+
+################################################################################
+#### INPUT
+################################################################################
+
+input MonthlyExpensesInput {
+  year: Int!
+  month: Int!
+}
+
+################################################################################
+#### TYPE
+################################################################################
+
+# The entries and the total come from one operation, so the two can never disagree, and so
+# that 1.2.0's export calls this rather than summing again. No pagination: spec 7 caps the
+# heaviest read at a few hundred rows.
+type MonthlyExpensesResult {
+  expenses: [Expense!]!
+  totalAmount: Int!           # yen
+}
